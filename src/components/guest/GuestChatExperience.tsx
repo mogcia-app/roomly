@@ -157,6 +157,20 @@ function GuestCallWebRTC({
   const frontCandidateSetRef = useRef<Set<string>>(new Set());
   const hasStartedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugEvents, setDebugEvents] = useState<string[]>([]);
+
+  function pushDebugEvent(message: string) {
+    const timestamp = new Date().toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    setDebugEvents((current) => {
+      const next = [...current, `${timestamp} ${message}`];
+      return next.slice(-8);
+    });
+  }
 
   useEffect(() => {
     let isCancelled = false;
@@ -169,9 +183,11 @@ function GuestCallWebRTC({
       }
 
       hasStartedRef.current = true;
+      pushDebugEvent("active 検知。WebRTC 初期化を開始");
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        pushDebugEvent("getUserMedia 成功");
 
         if (isCancelled) {
           stream.getTracks().forEach((track) => track.stop());
@@ -204,18 +220,24 @@ function GuestCallWebRTC({
 
         peerConnection.onicecandidate = (event) => {
           if (!event.candidate) {
+            pushDebugEvent("ICE candidate 収集完了");
             return;
           }
 
           void updateDoc(callDocRef, {
             guest_ice_candidates: arrayUnion(event.candidate.toJSON()),
-          }).catch(() => {
+          }).then(() => {
+            pushDebugEvent("guest ICE candidate 保存");
+          }).catch((caughtError) => {
+            console.error("[guest/webrtc] guest ice save failed", caughtError);
+            pushDebugEvent("guest ICE candidate 保存失敗");
             setError("通話接続の候補送信に失敗しました。");
           });
         };
 
         peerConnection.onconnectionstatechange = () => {
           const connectionState = peerConnection.connectionState;
+          pushDebugEvent(`接続状態: ${connectionState}`);
 
           if (connectionState === "connected") {
             void updateDoc(callDocRef, {
@@ -233,7 +255,9 @@ function GuestCallWebRTC({
         };
 
         const offer = await peerConnection.createOffer();
+        pushDebugEvent("offer 作成成功");
         await peerConnection.setLocalDescription(offer);
+        pushDebugEvent("localDescription 設定成功");
 
         if (isCancelled) {
           return;
@@ -246,8 +270,10 @@ function GuestCallWebRTC({
           },
           webrtc_status: "waiting_offer",
         });
+        pushDebugEvent("offer_sdp 保存成功");
       } catch (caughtError) {
         console.error("[guest/webrtc] failed", caughtError);
+        pushDebugEvent("WebRTC 初期化失敗");
         setError("通話の初期化に失敗しました。");
 
         void updateDoc(callDocRef, {
@@ -263,6 +289,8 @@ function GuestCallWebRTC({
         return;
       }
 
+      pushDebugEvent(`snapshot status=${data.status ?? "unknown"}`);
+
       if (data.status === "active" && !hasStartedRef.current) {
         await startWebRTC();
       }
@@ -277,9 +305,11 @@ function GuestCallWebRTC({
         data.answer_sdp &&
         !activePeerConnection.currentRemoteDescription
       ) {
+        pushDebugEvent("answer_sdp 検知");
         await activePeerConnection.setRemoteDescription(
           new RTCSessionDescription(data.answer_sdp),
         );
+        pushDebugEvent("remoteDescription 設定成功");
       }
 
       for (const candidate of data.front_ice_candidates ?? []) {
@@ -293,6 +323,7 @@ function GuestCallWebRTC({
         await activePeerConnection.addIceCandidate(
           new RTCIceCandidate(candidate),
         );
+        pushDebugEvent("front ICE candidate 適用");
       }
     });
 
@@ -316,6 +347,16 @@ function GuestCallWebRTC({
           {error}
         </div>
       ) : null}
+      <div className="mt-3 rounded-[14px] border border-[#eaded9] bg-[#f8f4ef] px-3 py-3 text-left text-[11px] leading-5 text-[#6b534a]">
+        <div className="mb-1 font-semibold text-[#8e2219]">通話デバッグ</div>
+        {debugEvents.length > 0 ? (
+          debugEvents.map((event) => (
+            <div key={event}>{event}</div>
+          ))
+        ) : (
+          <div>イベント待機中</div>
+        )}
+      </div>
     </>
   );
 }

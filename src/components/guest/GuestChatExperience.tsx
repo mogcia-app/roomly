@@ -61,6 +61,7 @@ type CallSignalingDocument = {
   answer_sdp?: RTCSessionDescriptionInit;
   front_ice_candidates?: CallSignalingCandidate[];
   offer_sdp?: RTCSessionDescriptionInit;
+  status?: "queue" | "active" | "unavailable" | "ended";
   webrtc_status?: "waiting_offer" | "answering" | "connected" | "failed";
 };
 
@@ -134,6 +135,17 @@ function createOptimisticMessage(
   };
 }
 
+function formatCallDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.floor(totalSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+
+  return `${minutes}:${seconds}`;
+}
+
 function GuestCallWebRTC({
   callId,
 }: {
@@ -143,13 +155,21 @@ function GuestCallWebRTC({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const frontCandidateSetRef = useRef<Set<string>>(new Set());
+  const hasStartedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
     const frontCandidateSet = frontCandidateSetRef.current;
+    const callDocRef = doc(db, "calls", callId);
 
-    async function setupCall() {
+    async function startWebRTC() {
+      if (hasStartedRef.current) {
+        return;
+      }
+
+      hasStartedRef.current = true;
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -187,7 +207,7 @@ function GuestCallWebRTC({
             return;
           }
 
-          void updateDoc(doc(db, "calls", callId), {
+          void updateDoc(callDocRef, {
             guest_ice_candidates: arrayUnion(event.candidate.toJSON()),
           }).catch(() => {
             setError("通話接続の候補送信に失敗しました。");
@@ -198,14 +218,14 @@ function GuestCallWebRTC({
           const connectionState = peerConnection.connectionState;
 
           if (connectionState === "connected") {
-            void updateDoc(doc(db, "calls", callId), {
+            void updateDoc(callDocRef, {
               webrtc_status: "connected",
             }).catch(() => undefined);
             return;
           }
 
           if (connectionState === "failed") {
-            void updateDoc(doc(db, "calls", callId), {
+            void updateDoc(callDocRef, {
               webrtc_status: "failed",
             }).catch(() => undefined);
             setError("通話接続に失敗しました。");
@@ -219,68 +239,71 @@ function GuestCallWebRTC({
           return;
         }
 
-        await updateDoc(doc(db, "calls", callId), {
+        await updateDoc(callDocRef, {
           offer_sdp: {
             type: offer.type,
             sdp: offer.sdp ?? "",
           },
           webrtc_status: "waiting_offer",
         });
-
-        return onSnapshot(doc(db, "calls", callId), async (snapshot) => {
-          const data = snapshot.data() as CallSignalingDocument | undefined;
-
-          if (!data || !peerConnectionRef.current) {
-            return;
-          }
-
-          const activePeerConnection = peerConnectionRef.current;
-
-          if (
-            data.answer_sdp &&
-            !activePeerConnection.currentRemoteDescription
-          ) {
-            await activePeerConnection.setRemoteDescription(
-              new RTCSessionDescription(data.answer_sdp),
-            );
-          }
-
-          for (const candidate of data.front_ice_candidates ?? []) {
-            const key = JSON.stringify(candidate);
-
-            if (frontCandidateSet.has(key)) {
-              continue;
-            }
-
-            frontCandidateSet.add(key);
-            await activePeerConnection.addIceCandidate(
-              new RTCIceCandidate(candidate),
-            );
-          }
-        });
       } catch (caughtError) {
         console.error("[guest/webrtc] failed", caughtError);
         setError("通話の初期化に失敗しました。");
 
-        void updateDoc(doc(db, "calls", callId), {
+        void updateDoc(callDocRef, {
           webrtc_status: "failed",
         }).catch(() => undefined);
       }
     }
 
-    let unsubscribeSnapshot: (() => void) | undefined;
+    const unsubscribeSnapshot = onSnapshot(callDocRef, async (snapshot) => {
+      const data = snapshot.data() as CallSignalingDocument | undefined;
 
-    void setupCall().then((unsubscribe) => {
-      unsubscribeSnapshot = unsubscribe;
+      if (!data) {
+        return;
+      }
+
+      if (data.status === "active" && !hasStartedRef.current) {
+        await startWebRTC();
+      }
+
+      if (!peerConnectionRef.current) {
+        return;
+      }
+
+      const activePeerConnection = peerConnectionRef.current;
+
+      if (
+        data.answer_sdp &&
+        !activePeerConnection.currentRemoteDescription
+      ) {
+        await activePeerConnection.setRemoteDescription(
+          new RTCSessionDescription(data.answer_sdp),
+        );
+      }
+
+      for (const candidate of data.front_ice_candidates ?? []) {
+        const key = JSON.stringify(candidate);
+
+        if (frontCandidateSet.has(key)) {
+          continue;
+        }
+
+        frontCandidateSet.add(key);
+        await activePeerConnection.addIceCandidate(
+          new RTCIceCandidate(candidate),
+        );
+      }
     });
 
     return () => {
       isCancelled = true;
-      unsubscribeSnapshot?.();
+      unsubscribeSnapshot();
       peerConnectionRef.current?.close();
       peerConnectionRef.current = null;
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
+      hasStartedRef.current = false;
       frontCandidateSet.clear();
     };
   }, [callId]);
@@ -295,6 +318,79 @@ function GuestCallWebRTC({
       ) : null}
     </>
   );
+}
+
+function GuestCallRingtone({
+  enabled,
+}: {
+  enabled: boolean;
+}) {
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const AudioContextClass =
+      window.AudioContext ||
+      // Safari fallback
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+
+    if (!AudioContextClass) {
+      return;
+    }
+
+    const audioContext = new AudioContextClass();
+    let timeoutId: number | undefined;
+    let stopped = false;
+
+    const playRing = () => {
+      if (stopped) {
+        return;
+      }
+
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(660, audioContext.currentTime + 0.18);
+
+      gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.04,
+        audioContext.currentTime + 0.03,
+      );
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.0001,
+        audioContext.currentTime + 0.55,
+      );
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.6);
+
+      timeoutId = window.setTimeout(playRing, 1400);
+    };
+
+    void audioContext.resume().then(() => {
+      playRing();
+    }).catch(() => undefined);
+
+    return () => {
+      stopped = true;
+
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      void audioContext.close().catch(() => undefined);
+    };
+  }, [enabled]);
+
+  return null;
 }
 
 function GuestChatInput({
@@ -400,6 +496,7 @@ function CallStatusPanel({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [activeSeconds, setActiveSeconds] = useState(0);
 
   useEffect(() => {
     if (!callId || (callState !== "queue" && callState !== "active")) {
@@ -449,6 +546,20 @@ function CallStatusPanel({
       window.clearInterval(timer);
     };
   }, [callId, callState, roomId, router, startTransition]);
+
+  useEffect(() => {
+    if (callState !== "active") {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setActiveSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [callState]);
 
   async function switchToChat() {
     setError(null);
@@ -516,27 +627,31 @@ function CallStatusPanel({
   }
 
   return (
-    <div className="mb-4 rounded-[24px] border border-[#e8d7cf] bg-white/92 p-4 shadow-[0_8px_28px_rgba(72,47,35,0.08)]">
+    <section className="flex flex-1 flex-col items-center justify-center bg-[radial-gradient(circle_at_top,rgba(173,34,24,0.16),transparent_32%),linear-gradient(180deg,#f6eee8_0%,#efe5dc_100%)] px-6 py-8 text-center">
+      <div className="w-full max-w-sm rounded-[34px] border border-[#e8d7cf] bg-white/92 px-6 py-8 shadow-[0_18px_60px_rgba(72,47,35,0.12)]">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#ad2218] text-4xl text-white shadow-[0_10px_30px_rgba(173,34,24,0.28)]">
+          {callState === "active" ? "☎" : "…"}
+        </div>
       {callState === "queue" ? (
         <>
-          <div className="flex items-center gap-2 text-[12px] font-semibold text-[#8e2219]">
+          <div className="mt-6 flex items-center justify-center gap-2 text-[12px] font-semibold text-[#8e2219]">
             <span className="h-2.5 w-2.5 rounded-full bg-[#ad2218] animate-pulse" />
             呼び出し中
           </div>
-          <div className="mt-2 text-[18px] font-semibold text-[#251815]">
+          <div className="mt-3 text-[28px] font-semibold tracking-tight text-[#251815]">
             フロントを呼び出しています
           </div>
-          <div className="mt-1 text-sm leading-6 text-[#6f5850]">
-            応答があるまでこのままお待ちください。つながらない場合は、チャットに切り替えてメッセージを送れます。
+          <div className="mt-3 text-sm leading-7 text-[#6f5850]">
+            応答があるまでこのままお待ちください。つながったら自動で通話画面に切り替わります。
           </div>
-          <div className="mt-4 flex gap-2">
+          <div className="mt-6 flex flex-col gap-3">
             <button
               type="button"
               disabled={isPending}
               onClick={() => {
                 void switchToChat();
               }}
-              className="rounded-full bg-[#ad2218] px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-60"
+              className="w-full rounded-full bg-[#ad2218] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
               チャットで送る
             </button>
@@ -544,7 +659,7 @@ function CallStatusPanel({
               type="button"
               disabled={isPending}
               onClick={endCall}
-              className="rounded-full border border-[#eaded9] px-4 py-2 text-[12px] font-semibold text-[#5d463d] disabled:opacity-60"
+              className="w-full rounded-full border border-[#eaded9] px-4 py-3 text-sm font-semibold text-[#5d463d] disabled:opacity-60"
             >
               呼び出しを終了
             </button>
@@ -554,30 +669,32 @@ function CallStatusPanel({
 
       {callState === "active" ? (
         <>
-          <div className="flex items-center gap-2 text-[12px] font-semibold text-[#8e2219]">
+          <div className="mt-6 flex items-center justify-center gap-2 text-[12px] font-semibold text-[#8e2219]">
             <span className="h-2.5 w-2.5 rounded-full bg-[#ad2218] animate-pulse" />
-            通訳中...
+            通話中
           </div>
-          <div className="mt-2 text-[18px] font-semibold text-[#251815]">
+          <div className="mt-2 text-[13px] font-semibold tracking-[0.28em] text-[#b05c52]">
+            {formatCallDuration(activeSeconds)}
+          </div>
+          <div className="mt-2 text-[28px] font-semibold tracking-tight text-[#251815]">
             通話に接続しました
           </div>
-          <div className="mt-1 text-sm leading-6 text-[#6f5850]">
-            発話後、翻訳音声が再生されるまで2〜4秒ほどかかる場合があります。
+          <div className="mt-3 text-sm leading-7 text-[#6f5850]">
+            マイクをオンにして、そのままお話しください。翻訳音声が再生されるまで数秒かかる場合があります。
           </div>
-          {callId ? <GuestCallWebRTC callId={callId} /> : null}
-          <div className="mt-4 flex gap-2">
+          <div className="mt-6 grid gap-3">
             <button
               type="button"
-              className="rounded-full border border-[#eaded9] px-4 py-2 text-[12px] font-semibold text-[#5d463d]"
+              className="w-full rounded-full border border-[#eaded9] px-4 py-3 text-sm font-semibold text-[#5d463d]"
             >
               保留
             </button>
             <button
               type="button"
               onClick={endCall}
-              className="rounded-full bg-[#ad2218] px-4 py-2 text-[12px] font-semibold text-white"
+              className="w-full rounded-full bg-[#ad2218] px-4 py-3 text-sm font-semibold text-white"
             >
-              終了
+              電話を切る
             </button>
           </div>
         </>
@@ -585,24 +702,24 @@ function CallStatusPanel({
 
       {callState === "unavailable" ? (
         <>
-          <div className="flex items-center gap-2 text-[12px] font-semibold text-[#8e2219]">
+          <div className="mt-6 flex items-center justify-center gap-2 text-[12px] font-semibold text-[#8e2219]">
             <span className="h-2.5 w-2.5 rounded-full bg-[#d39b90]" />
             現在つながりません
           </div>
-          <div className="mt-2 text-[18px] font-semibold text-[#251815]">
+          <div className="mt-3 text-[28px] font-semibold tracking-tight text-[#251815]">
             いまは通話に出られません
           </div>
-          <div className="mt-1 text-sm leading-6 text-[#6f5850]">
+          <div className="mt-3 text-sm leading-7 text-[#6f5850]">
             チャットで内容を送ることができます。急ぎでなければ、そのままメッセージをお送りください。
           </div>
-          <div className="mt-4 flex gap-2">
+          <div className="mt-6 flex flex-col gap-3">
             <button
               type="button"
               disabled={isPending}
               onClick={() => {
                 void switchToChat();
               }}
-              className="rounded-full bg-[#ad2218] px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-60"
+              className="w-full rounded-full bg-[#ad2218] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
               チャットに切り替える
             </button>
@@ -612,7 +729,7 @@ function CallStatusPanel({
               onClick={() => {
                 void retryCall();
               }}
-              className="rounded-full border border-[#eaded9] px-4 py-2 text-[12px] font-semibold text-[#5d463d] disabled:opacity-60"
+              className="w-full rounded-full border border-[#eaded9] px-4 py-3 text-sm font-semibold text-[#5d463d] disabled:opacity-60"
             >
               もう一度呼び出す
             </button>
@@ -621,11 +738,12 @@ function CallStatusPanel({
       ) : null}
 
       {error ? (
-        <div className="mt-3 rounded-[14px] border border-[#f0c8c2] bg-[#fff3ef] px-3 py-2 text-[12px] text-[#8e2219]">
+        <div className="mt-4 rounded-[18px] border border-[#f0c8c2] bg-[#fff3ef] px-4 py-3 text-sm text-[#8e2219]">
           {error}
         </div>
       ) : null}
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -915,8 +1033,19 @@ export function GuestChatExperience({
 
   return (
     <>
-      <section className="flex-1 overflow-y-auto bg-[#e6ddd5] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.32),transparent_20%),linear-gradient(0deg,rgba(255,255,255,0.08),rgba(255,255,255,0.08))] px-3 py-4 lg:px-6 lg:py-3">
-        {callState ? <CallStatusPanel roomId={roomId} callId={callId} callState={callState} /> : null}
+      <GuestCallRingtone enabled={callState === "queue"} />
+      {callId && (callState === "queue" || callState === "active") ? (
+        <GuestCallWebRTC callId={callId} />
+      ) : null}
+      {callState ? (
+        <CallStatusPanel
+          key={`${callId ?? "none"}:${callState}`}
+          roomId={roomId}
+          callId={callId}
+          callState={callState}
+        />
+      ) : (
+        <section className="flex-1 overflow-y-auto bg-[#e6ddd5] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.32),transparent_20%),linear-gradient(0deg,rgba(255,255,255,0.08),rgba(255,255,255,0.08))] px-3 py-4 lg:px-6 lg:py-3">
         {!hasGuestMessage && mode === "ai" ? (
           <StarterActions
             roomId={roomId}
@@ -980,25 +1109,30 @@ export function GuestChatExperience({
           })}
           <div ref={bottomRef} />
         </div>
-      </section>
+        </section>
+      )}
 
-      <ChatAssistBar
-        roomId={roomId}
-        mode={mode}
-        callState={callState}
-        onOptimisticSend={(message) => {
-          setOptimisticMessages((current) => [...current, message]);
-        }}
-      />
+      {!callState ? (
+        <ChatAssistBar
+          roomId={roomId}
+          mode={mode}
+          callState={callState}
+          onOptimisticSend={(message) => {
+            setOptimisticMessages((current) => [...current, message]);
+          }}
+        />
+      ) : null}
 
-      <GuestChatInput
-        roomId={roomId}
-        mode={mode}
-        prompts={prompts}
-        onOptimisticSend={(message) => {
-          setOptimisticMessages((current) => [...current, message]);
-        }}
-      />
+      {!callState ? (
+        <GuestChatInput
+          roomId={roomId}
+          mode={mode}
+          prompts={prompts}
+          onOptimisticSend={(message) => {
+            setOptimisticMessages((current) => [...current, message]);
+          }}
+        />
+      ) : null}
     </>
   );
 }

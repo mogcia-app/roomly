@@ -2,8 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  arrayUnion,
+  doc,
+  onSnapshot,
+  updateDoc,
+} from "firebase/firestore";
 
 import type { GuestMessage } from "@/lib/guest-demo";
+import { db } from "@/lib/firebase";
 
 type GuestChatExperienceProps = {
   roomId: string;
@@ -41,6 +48,20 @@ type CallStartPayload = {
   callId: string;
   threadId?: string;
   status: "queue" | "active" | "unavailable";
+};
+
+type CallSignalingCandidate = {
+  candidate?: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+};
+
+type CallSignalingDocument = {
+  answer_sdp?: RTCSessionDescriptionInit;
+  front_ice_candidates?: CallSignalingCandidate[];
+  offer_sdp?: RTCSessionDescriptionInit;
+  webrtc_status?: "waiting_offer" | "answering" | "connected" | "failed";
 };
 
 const requestCategories = [
@@ -111,6 +132,169 @@ function createOptimisticMessage(
     timestamp: new Date().toISOString(),
     optimistic: true,
   };
+}
+
+function GuestCallWebRTC({
+  callId,
+}: {
+  callId: string;
+}) {
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const frontCandidateSetRef = useRef<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const frontCandidateSet = frontCandidateSetRef.current;
+
+    async function setupCall() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        if (isCancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const peerConnection = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        });
+
+        localStreamRef.current = stream;
+        peerConnectionRef.current = peerConnection;
+
+        stream.getTracks().forEach((track) => {
+          peerConnection.addTrack(track, stream);
+        });
+
+        peerConnection.ontrack = (event) => {
+          const [remoteStream] = event.streams;
+
+          if (!remoteStream || !remoteAudioRef.current) {
+            return;
+          }
+
+          remoteAudioRef.current.srcObject = remoteStream;
+          void remoteAudioRef.current.play().catch(() => {
+            setError("音声再生を開始できませんでした。端末の音声設定をご確認ください。");
+          });
+        };
+
+        peerConnection.onicecandidate = (event) => {
+          if (!event.candidate) {
+            return;
+          }
+
+          void updateDoc(doc(db, "calls", callId), {
+            guest_ice_candidates: arrayUnion(event.candidate.toJSON()),
+          }).catch(() => {
+            setError("通話接続の候補送信に失敗しました。");
+          });
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+          const connectionState = peerConnection.connectionState;
+
+          if (connectionState === "connected") {
+            void updateDoc(doc(db, "calls", callId), {
+              webrtc_status: "connected",
+            }).catch(() => undefined);
+            return;
+          }
+
+          if (connectionState === "failed") {
+            void updateDoc(doc(db, "calls", callId), {
+              webrtc_status: "failed",
+            }).catch(() => undefined);
+            setError("通話接続に失敗しました。");
+          }
+        };
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        if (isCancelled) {
+          return;
+        }
+
+        await updateDoc(doc(db, "calls", callId), {
+          offer_sdp: {
+            type: offer.type,
+            sdp: offer.sdp ?? "",
+          },
+          webrtc_status: "waiting_offer",
+        });
+
+        return onSnapshot(doc(db, "calls", callId), async (snapshot) => {
+          const data = snapshot.data() as CallSignalingDocument | undefined;
+
+          if (!data || !peerConnectionRef.current) {
+            return;
+          }
+
+          const activePeerConnection = peerConnectionRef.current;
+
+          if (
+            data.answer_sdp &&
+            !activePeerConnection.currentRemoteDescription
+          ) {
+            await activePeerConnection.setRemoteDescription(
+              new RTCSessionDescription(data.answer_sdp),
+            );
+          }
+
+          for (const candidate of data.front_ice_candidates ?? []) {
+            const key = JSON.stringify(candidate);
+
+            if (frontCandidateSet.has(key)) {
+              continue;
+            }
+
+            frontCandidateSet.add(key);
+            await activePeerConnection.addIceCandidate(
+              new RTCIceCandidate(candidate),
+            );
+          }
+        });
+      } catch (caughtError) {
+        console.error("[guest/webrtc] failed", caughtError);
+        setError("通話の初期化に失敗しました。");
+
+        void updateDoc(doc(db, "calls", callId), {
+          webrtc_status: "failed",
+        }).catch(() => undefined);
+      }
+    }
+
+    let unsubscribeSnapshot: (() => void) | undefined;
+
+    void setupCall().then((unsubscribe) => {
+      unsubscribeSnapshot = unsubscribe;
+    });
+
+    return () => {
+      isCancelled = true;
+      unsubscribeSnapshot?.();
+      peerConnectionRef.current?.close();
+      peerConnectionRef.current = null;
+      localStreamRef.current?.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+      frontCandidateSet.clear();
+    };
+  }, [callId]);
+
+  return (
+    <>
+      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+      {error ? (
+        <div className="mt-3 rounded-[14px] border border-[#f0c8c2] bg-[#fff3ef] px-3 py-2 text-[12px] text-[#8e2219]">
+          {error}
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 function GuestChatInput({
@@ -380,6 +564,7 @@ function CallStatusPanel({
           <div className="mt-1 text-sm leading-6 text-[#6f5850]">
             発話後、翻訳音声が再生されるまで2〜4秒ほどかかる場合があります。
           </div>
+          {callId ? <GuestCallWebRTC callId={callId} /> : null}
           <div className="mt-4 flex gap-2">
             <button
               type="button"

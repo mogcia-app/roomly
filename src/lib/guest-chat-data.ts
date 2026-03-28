@@ -16,8 +16,18 @@ type FirestoreChatThread = {
   stayId?: string;
   room_id?: string;
   roomId?: string;
+  hotel_id?: string | null;
   mode?: ThreadMode;
+  status?: "new" | "in_progress" | "resolved";
+  category?: string | null;
+  event_type?: "chat_handoff_requested";
+  guest_language?: string | null;
+  last_message_body?: string;
+  last_message_at?: unknown;
+  last_message_sender?: "guest" | "ai" | "front" | "system";
+  unread_count_front?: unknown;
   created_at?: unknown;
+  updated_at?: unknown;
 };
 
 type FirestoreMessage = {
@@ -91,8 +101,14 @@ async function createThread(
   const threadRef = await getAdminDb().collection("chat_threads").add({
     stay_id: stayStatus.stayId ?? stayStatus.roomId,
     room_id: stayStatus.roomId,
+    hotel_id: stayStatus.hotelId ?? null,
     mode,
+    status: mode === "human" ? "new" : "resolved",
+    guest_language: stayStatus.selectedLanguage,
+    last_message_body: "",
+    unread_count_front: 0,
     created_at: FieldValue.serverTimestamp(),
+    updated_at: FieldValue.serverTimestamp(),
   } satisfies FirestoreChatThread & { created_at: unknown });
 
   return threadRef.id;
@@ -109,6 +125,39 @@ async function ensureThread(
   }
 
   return createThread(stayStatus, mode);
+}
+
+async function updateHumanThreadMetadata(
+  threadId: string,
+  stayStatus: GuestStayStatus,
+  lastMessageBody: string,
+  lastMessageSender: "guest" | "ai" | "front" | "system",
+  category?: string,
+) {
+  await getAdminDb().collection("chat_threads").doc(threadId).set(
+    {
+      stay_id: stayStatus.stayId ?? stayStatus.roomId,
+      room_id: stayStatus.roomId,
+      hotel_id: stayStatus.hotelId ?? null,
+      mode: "human" satisfies ThreadMode,
+      status: "new" as const,
+      category: category ?? null,
+      event_type: "chat_handoff_requested" as const,
+      guest_language: stayStatus.selectedLanguage,
+      last_message_body: lastMessageBody,
+      last_message_at: FieldValue.serverTimestamp(),
+      last_message_sender: lastMessageSender,
+      unread_count_front: FieldValue.increment(1),
+      updated_at: FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
+    } satisfies FirestoreChatThread & {
+      last_message_at: unknown;
+      unread_count_front: unknown;
+      updated_at: unknown;
+      created_at: unknown;
+    },
+    { merge: true },
+  );
 }
 
 export async function ensureGuestHumanThread(stayStatus: GuestStayStatus) {
@@ -242,11 +291,26 @@ export async function requestHumanHandoff(
   const noticeBody = category
     ? `フロントへ通知しました。依頼内容: ${category}`
     : "フロントへ通知しました。返信をお待ちください。";
+  const guestBody = category ?? "フロント対応をお願いします。";
   const hasHandoffNotice = existingMessages.some(
     (message) =>
       message.sender === "system" &&
       message.body === noticeBody,
   );
+  const hasGuestRequest = existingMessages.some(
+    (message) =>
+      message.sender === "guest" &&
+      message.body === guestBody,
+  );
+
+  if (!hasGuestRequest) {
+    await getAdminDb().collection("messages").add({
+      thread_id: threadId,
+      sender: "guest",
+      body: guestBody,
+      timestamp: FieldValue.serverTimestamp(),
+    });
+  }
 
   if (!hasHandoffNotice) {
     await getAdminDb().collection("messages").add({
@@ -256,6 +320,8 @@ export async function requestHumanHandoff(
       timestamp: FieldValue.serverTimestamp(),
     });
   }
+
+  await updateHumanThreadMetadata(threadId, stayStatus, guestBody, "guest", category);
 
   return { ok: true as const, threadId };
 }
@@ -302,6 +368,8 @@ export async function postGuestMessageToStore(
       body: "フロントに通知しました。返信をお待ちください。",
       timestamp: FieldValue.serverTimestamp(),
     });
+
+    await updateHumanThreadMetadata(threadId, stayStatus, trimmedBody, "guest");
   }
 
   return { ok: true as const, threadId };

@@ -157,9 +157,33 @@ export async function startGuestCallSession(stayStatus: GuestStayStatus) {
       transaction.set(threadRef, {
         stay_id: stayKey,
         room_id: stayStatus.roomId,
+        hotel_id: stayStatus.hotelId ?? null,
         mode: "human",
+        status: "new",
+        guest_language: stayStatus.selectedLanguage,
+        last_message_body: CALL_STARTED_MESSAGE,
+        last_message_at: FieldValue.serverTimestamp(),
+        last_message_sender: "system",
+        unread_count_front: 1,
         created_at: FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
       });
+    } else {
+      transaction.set(
+        threadRef,
+        {
+          hotel_id: stayStatus.hotelId ?? null,
+          mode: "human",
+          status: "new",
+          guest_language: stayStatus.selectedLanguage,
+          last_message_body: CALL_STARTED_MESSAGE,
+          last_message_at: FieldValue.serverTimestamp(),
+          last_message_sender: "system",
+          unread_count_front: FieldValue.increment(1),
+          updated_at: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
     }
 
     const existingCallSnapshot = await transaction.get(

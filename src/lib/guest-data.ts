@@ -9,6 +9,7 @@ import {
   type GuestRoomContext,
   type GuestStayStatus,
 } from "@/lib/guest-demo";
+import { resolveGuestHotelId } from "@/lib/guest-hotel-id";
 
 type FirestoreRoom = {
   hotel_id?: string;
@@ -304,7 +305,16 @@ function buildFallbackStayStatus(
   roomId: string,
   selectedLanguage: GuestLanguage | null,
 ) {
-  return getGuestStayStatus(roomId, selectedLanguage);
+  const fallbackStatus = getGuestStayStatus(roomId, selectedLanguage);
+
+  if (!fallbackStatus) {
+    return null;
+  }
+
+  return {
+    ...fallbackStatus,
+    hotelId: resolveGuestHotelId(fallbackStatus.hotelId),
+  };
 }
 
 export async function getGuestRoomContextFromStore(
@@ -341,7 +351,7 @@ export async function getGuestStayStatusFromStore(
       return buildFallbackStayStatus(roomId, selectedLanguage);
     }
 
-    const hotelId = toHotelId(roomRecord.data);
+    const hotelId = resolveGuestHotelId(toHotelId(roomRecord.data));
     const [hotelName, activeStay, hearingSheet] = await Promise.all([
       findHotelName(hotelId),
       findActiveStayByRoomId(roomId),

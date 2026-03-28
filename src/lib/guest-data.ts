@@ -1,14 +1,6 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  where,
-} from "firebase/firestore";
+import "server-only";
 
-import { db } from "@/lib/firebase";
+import { getAdminDb } from "@/lib/firebase-admin";
 import {
   getGuestRoomContext,
   getGuestStayStatus,
@@ -215,20 +207,22 @@ function getKnowledgeCandidates(sheet: FirestoreHearingSheet | null) {
 }
 
 async function findRoomByRoomId(roomId: string) {
-  const directSnapshot = await getDoc(doc(db, "rooms", roomId));
+  const db = getAdminDb();
+  const directSnapshot = await db.collection("rooms").doc(roomId).get();
 
-  if (directSnapshot.exists()) {
+  if (directSnapshot.exists) {
     return {
       id: directSnapshot.id,
       data: directSnapshot.data() as FirestoreRoom,
     };
   }
 
-  const roomsRef = collection(db, "rooms");
-
   for (const fieldName of ["room_id", "roomId", "room_number", "roomNumber"]) {
-    const roomQuery = query(roomsRef, where(fieldName, "==", roomId), limit(1));
-    const roomSnapshot = await getDocs(roomQuery);
+    const roomSnapshot = await db
+      .collection("rooms")
+      .where(fieldName, "==", roomId)
+      .limit(1)
+      .get();
 
     if (!roomSnapshot.empty) {
       const [match] = roomSnapshot.docs;
@@ -247,9 +241,9 @@ async function findHotelName(hotelId: string | null) {
     return "Roomly旅館";
   }
 
-  const hotelSnapshot = await getDoc(doc(db, "hotels", hotelId));
+  const hotelSnapshot = await getAdminDb().collection("hotels").doc(hotelId).get();
 
-  if (!hotelSnapshot.exists()) {
+  if (!hotelSnapshot.exists) {
     return "Roomly旅館";
   }
 
@@ -257,17 +251,16 @@ async function findHotelName(hotelId: string | null) {
 }
 
 async function findActiveStayByRoomId(roomId: string) {
-  const staysRef = collection(db, "stays");
+  const db = getAdminDb();
 
   for (const roomFieldName of ["room_id", "roomId"]) {
     for (const activeFieldName of ["is_active", "isActive"]) {
-      const stayQuery = query(
-        staysRef,
-        where(roomFieldName, "==", roomId),
-        where(activeFieldName, "==", true),
-        limit(1),
-      );
-      const staySnapshot = await getDocs(stayQuery);
+      const staySnapshot = await db
+        .collection("stays")
+        .where(roomFieldName, "==", roomId)
+        .where(activeFieldName, "==", true)
+        .limit(1)
+        .get();
 
       if (!staySnapshot.empty) {
         const [match] = staySnapshot.docs;
@@ -287,18 +280,18 @@ async function findHearingSheetByHotelId(hotelId: string | null) {
     return null;
   }
 
-  const directSnapshot = await getDoc(doc(db, "hearing_sheets", hotelId));
+  const db = getAdminDb();
+  const directSnapshot = await db.collection("hearing_sheets").doc(hotelId).get();
 
-  if (directSnapshot.exists()) {
+  if (directSnapshot.exists) {
     return directSnapshot.data() as FirestoreHearingSheet;
   }
 
-  const hearingSheetQuery = query(
-    collection(db, "hearing_sheets"),
-    where("hotel_id", "==", hotelId),
-    limit(1),
-  );
-  const hearingSheetSnapshot = await getDocs(hearingSheetQuery);
+  const hearingSheetSnapshot = await db
+    .collection("hearing_sheets")
+    .where("hotel_id", "==", hotelId)
+    .limit(1)
+    .get();
 
   if (hearingSheetSnapshot.empty) {
     return null;

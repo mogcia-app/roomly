@@ -1,15 +1,8 @@
-import {
-  addDoc,
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  where,
-} from "firebase/firestore";
+import "server-only";
 
-import { db } from "@/lib/firebase";
+import { FieldValue } from "firebase-admin/firestore";
+
+import { getAdminDb } from "@/lib/firebase-admin";
 import {
   getGuestThread,
   type GuestMessage,
@@ -63,29 +56,26 @@ async function findThread(
   stayStatus: GuestStayStatus,
   mode: ThreadMode,
 ) {
-  if (!stayStatus.stayId) {
-    return null;
-  }
+  const db = getAdminDb();
+  const stayKey = stayStatus.stayId ?? stayStatus.roomId;
 
-  const threadQuery = query(
-    collection(db, "chat_threads"),
-    where("stay_id", "==", stayStatus.stayId),
-    where("mode", "==", mode),
-    limit(1),
-  );
-  const snapshot = await getDocs(threadQuery);
+  const snapshot = await db
+    .collection("chat_threads")
+    .where("stay_id", "==", stayKey)
+    .where("mode", "==", mode)
+    .limit(1)
+    .get();
 
   if (!snapshot.empty) {
     return snapshot.docs[0];
   }
 
-  const altThreadQuery = query(
-    collection(db, "chat_threads"),
-    where("stayId", "==", stayStatus.stayId),
-    where("mode", "==", mode),
-    limit(1),
-  );
-  const altSnapshot = await getDocs(altThreadQuery);
+  const altSnapshot = await db
+    .collection("chat_threads")
+    .where("stayId", "==", stayKey)
+    .where("mode", "==", mode)
+    .limit(1)
+    .get();
 
   if (!altSnapshot.empty) {
     return altSnapshot.docs[0];
@@ -98,11 +88,11 @@ async function createThread(
   stayStatus: GuestStayStatus,
   mode: ThreadMode,
 ) {
-  const threadRef = await addDoc(collection(db, "chat_threads"), {
+  const threadRef = await getAdminDb().collection("chat_threads").add({
     stay_id: stayStatus.stayId ?? stayStatus.roomId,
     room_id: stayStatus.roomId,
     mode,
-    created_at: serverTimestamp(),
+    created_at: FieldValue.serverTimestamp(),
   } satisfies FirestoreChatThread & { created_at: unknown });
 
   return threadRef.id;
@@ -130,12 +120,12 @@ export async function ensureGuestHumanThread(stayStatus: GuestStayStatus) {
 }
 
 async function getMessagesByThreadId(threadId: string) {
-  const directMessagesQuery = query(
-    collection(db, "messages"),
-    where("thread_id", "==", threadId),
-    orderBy("timestamp", "asc"),
-  );
-  const directSnapshot = await getDocs(directMessagesQuery);
+  const db = getAdminDb();
+  const directSnapshot = await db
+    .collection("messages")
+    .where("thread_id", "==", threadId)
+    .orderBy("timestamp", "asc")
+    .get();
 
   if (!directSnapshot.empty) {
     return directSnapshot.docs
@@ -145,12 +135,11 @@ async function getMessagesByThreadId(threadId: string) {
       .filter((value): value is GuestMessage => value !== null);
   }
 
-  const altMessagesQuery = query(
-    collection(db, "messages"),
-    where("threadId", "==", threadId),
-    orderBy("timestamp", "asc"),
-  );
-  const altSnapshot = await getDocs(altMessagesQuery);
+  const altSnapshot = await db
+    .collection("messages")
+    .where("threadId", "==", threadId)
+    .orderBy("timestamp", "asc")
+    .get();
 
   return altSnapshot.docs
     .map((docSnapshot) =>
@@ -260,11 +249,11 @@ export async function requestHumanHandoff(
   );
 
   if (!hasHandoffNotice) {
-    await addDoc(collection(db, "messages"), {
+    await getAdminDb().collection("messages").add({
       thread_id: threadId,
       sender: "system",
       body: noticeBody,
-      timestamp: serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
     });
   }
 
@@ -288,28 +277,30 @@ export async function postGuestMessageToStore(
 
   const threadId = await ensureThread(stayStatus, mode);
 
-  await addDoc(collection(db, "messages"), {
+  const db = getAdminDb();
+
+  await db.collection("messages").add({
     thread_id: threadId,
     sender: "guest",
     body: trimmedBody,
-    timestamp: serverTimestamp(),
+    timestamp: FieldValue.serverTimestamp(),
   });
 
   if (mode === "ai") {
-    await addDoc(collection(db, "messages"), {
+    await db.collection("messages").add({
       thread_id: threadId,
       sender: "ai",
       body: buildAiReply(stayStatus, trimmedBody),
-      timestamp: serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
     });
   }
 
   if (mode === "human") {
-    await addDoc(collection(db, "messages"), {
+    await db.collection("messages").add({
       thread_id: threadId,
       sender: "system",
       body: "フロントに通知しました。返信をお待ちください。",
-      timestamp: serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
     });
   }
 

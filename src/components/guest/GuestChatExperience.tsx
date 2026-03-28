@@ -582,13 +582,9 @@ function StarterActions({
     setError(null);
     setIsRequestOptionsOpen(false);
 
-    onOptimisticSend({
-      ...createOptimisticMessage(
-        "handoff-category",
-        "system",
-        `フロントへ通知しました。依頼内容: ${category}`,
-      ),
-    });
+    onOptimisticSend(
+      createOptimisticMessage("handoff-category", "guest", category),
+    );
 
     const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
       method: "POST",

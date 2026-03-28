@@ -288,15 +288,7 @@ export async function requestHumanHandoff(
 
   const threadId = await ensureThread(stayStatus, "human");
   const existingMessages = await getMessagesByThreadId(threadId);
-  const noticeBody = category
-    ? `フロントへ通知しました。依頼内容: ${category}`
-    : "フロントへ通知しました。返信をお待ちください。";
   const guestBody = category ?? "フロント対応をお願いします。";
-  const hasHandoffNotice = existingMessages.some(
-    (message) =>
-      message.sender === "system" &&
-      message.body === noticeBody,
-  );
   const hasGuestRequest = existingMessages.some(
     (message) =>
       message.sender === "guest" &&
@@ -312,13 +304,22 @@ export async function requestHumanHandoff(
     });
   }
 
-  if (!hasHandoffNotice) {
+  if (!category) {
     await getAdminDb().collection("messages").add({
       thread_id: threadId,
       sender: "system",
-      body: noticeBody,
+      body: "フロントへ通知しました。返信をお待ちください。",
       timestamp: FieldValue.serverTimestamp(),
     });
+
+    await updateHumanThreadMetadata(
+      threadId,
+      stayStatus,
+      "フロントへ通知しました。返信をお待ちください。",
+      "system",
+    );
+
+    return { ok: true as const, threadId };
   }
 
   await updateHumanThreadMetadata(threadId, stayStatus, guestBody, "guest", category);

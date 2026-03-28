@@ -153,6 +153,26 @@ export async function startGuestCallSession(stayStatus: GuestStayStatus) {
     const threadRef = existingThreadDoc?.ref ?? db.collection("chat_threads").doc();
     const threadId = threadRef.id;
 
+    const existingCallSnapshot = await transaction.get(
+      db
+        .collection("calls")
+        .where("thread_id", "==", threadId)
+        .where("direction", "==", "guest_to_front")
+        .where("status", "in", ["queue", "active"])
+        .limit(1),
+    );
+
+    if (!existingCallSnapshot.empty) {
+      const existingCall = existingCallSnapshot.docs[0];
+      const existingData = existingCall.data() as FirestoreCall;
+
+      return {
+        callId: existingCall.id,
+        threadId,
+        status: getCallStatus(existingData),
+      };
+    }
+
     if (!existingThreadDoc) {
       transaction.set(threadRef, {
         stay_id: stayKey,
@@ -184,26 +204,6 @@ export async function startGuestCallSession(stayStatus: GuestStayStatus) {
         },
         { merge: true },
       );
-    }
-
-    const existingCallSnapshot = await transaction.get(
-      db
-        .collection("calls")
-        .where("thread_id", "==", threadId)
-        .where("direction", "==", "guest_to_front")
-        .where("status", "in", ["queue", "active"])
-        .limit(1),
-    );
-
-    if (!existingCallSnapshot.empty) {
-      const existingCall = existingCallSnapshot.docs[0];
-      const existingData = existingCall.data() as FirestoreCall;
-
-      return {
-        callId: existingCall.id,
-        threadId,
-        status: getCallStatus(existingData),
-      };
     }
 
     const callRef = db.collection("calls").doc();

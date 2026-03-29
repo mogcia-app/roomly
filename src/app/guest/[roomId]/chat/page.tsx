@@ -7,7 +7,6 @@ import {
   getGuestLanguageLabel,
   isGuestLanguage,
 } from "@/lib/guest-demo";
-import { getGuestCallSession } from "@/lib/guest-call-data";
 import { getGuestMessagesFromStore } from "@/lib/guest-chat-data";
 import { getGuestStayStatusFromStore } from "@/lib/guest-data";
 import { getGuestLanguageCookieName } from "@/lib/guest-language-cookie";
@@ -17,8 +16,6 @@ type GuestChatPageProps = {
   searchParams: Promise<{
     lang?: string;
     mode?: string;
-    call?: string;
-    callId?: string;
   }>;
 };
 
@@ -27,7 +24,7 @@ export default async function GuestChatPage({
   searchParams,
 }: GuestChatPageProps) {
   const { roomId } = await params;
-  const { lang, mode, call, callId } = await searchParams;
+  const { lang, mode } = await searchParams;
 
   const cookieStore = await cookies();
   const storedLanguage = cookieStore.get(getGuestLanguageCookieName(roomId))?.value;
@@ -52,18 +49,6 @@ export default async function GuestChatPage({
   }
 
   const currentMode = mode === "human" ? "human" : "ai";
-  const fallbackCallState =
-    call === "active"
-      ? "active"
-      : call === "queue"
-        ? "queue"
-        : call === "unavailable"
-          ? "unavailable"
-          : undefined;
-  const callSession = callId ? await getGuestCallSession(callId) : null;
-  const callState = callSession?.status === "ended"
-    ? undefined
-    : callSession?.status ?? fallbackCallState;
   const thread = await getGuestMessagesFromStore(room, currentMode);
 
   return (
@@ -89,11 +74,9 @@ export default async function GuestChatPage({
         </header>
 
         <GuestChatExperience
-          key={`${currentMode}:${callSession?.callId ?? callId ?? "none"}:${thread.at(-1)?.id ?? "empty"}:${thread.length}`}
+          key={`${currentMode}:${thread.at(-1)?.id ?? "empty"}:${thread.length}`}
           roomId={roomId}
           mode={currentMode}
-          callId={callSession?.callId ?? callId}
-          callState={callState}
           prompts={room.hearingSheetPrompts}
           initialMessages={thread}
         />

@@ -16,7 +16,7 @@ export default function Home() {
           </h1>
 
           <p className="mt-3 text-sm leading-7 text-[#72574d]">
-            言語を選んで、そのままチャットまたは通話を開始してください。
+            言語を選んで、そのままチャットを開始してください。
           </p>
 
           <div className="mt-6 grid gap-3">

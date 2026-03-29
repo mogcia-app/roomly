@@ -66,7 +66,7 @@ export function GuestLanguageForm({
         言語を選択してください
       </h1>
       <p className="mt-3 text-sm leading-6 text-[#70574d]">
-        チャットまたは通話でフロントに連絡できます。アプリのインストールは不要です。
+        チャットでフロントに連絡できます。アプリのインストールは不要です。
       </p>
 
       <div className="mt-5 flex items-center gap-2 text-sm text-[#7b6359]">
@@ -112,7 +112,7 @@ export function GuestLanguageForm({
           </div>
         </div>
         <p className="mt-2 pl-1 text-sm text-[#7b6359]">
-          選択した言語でAI応答と通訳通話を利用します。
+          選択した言語でAI応答とチャット案内を利用します。
         </p>
       </div>
 

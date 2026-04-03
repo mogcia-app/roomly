@@ -56,13 +56,6 @@ export async function POST(
     );
   }
 
-  if (!stayStatus.stayActive) {
-    return Response.json(
-      { error: "STAY_INACTIVE" },
-      { status: 409 },
-    );
-  }
-
   await setStoredGuestLanguage(access.accessToken, body.language);
 
   return Response.json({

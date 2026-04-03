@@ -39,10 +39,6 @@ export async function POST(
       return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
     }
 
-    if (!stayStatus.stayActive) {
-      return Response.json({ error: "STAY_INACTIVE" }, { status: 409 });
-    }
-
     const result = await requestHumanHandoff(stayStatus, payload.category);
 
     return Response.json({ ok: result.ok, threadId: result.threadId });

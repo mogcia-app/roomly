@@ -71,10 +71,6 @@ export default async function GuestChatPage({
     notFound();
   }
 
-  if (!room.stayActive) {
-    redirect(`/guest/${access.accessToken}/survey`);
-  }
-
   const currentMode = mode === "human" ? "human" : "ai";
   const [thread, richMenu] = await Promise.all([
     getGuestMessagesFromStore(room, currentMode),

@@ -38,9 +38,5 @@ export default async function GuestEntryPage({ params }: GuestEntryPageProps) {
     notFound();
   }
 
-  if (room.stayActive) {
-    redirect(`/guest/${access.accessToken}/language`);
-  }
-
-  redirect(`/guest/${access.accessToken}/survey`);
+  redirect(`/guest/${access.accessToken}/language`);
 }

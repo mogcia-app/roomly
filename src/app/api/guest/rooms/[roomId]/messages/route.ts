@@ -1,6 +1,7 @@
 import { getGuestStayStatusFromStore } from "@/lib/guest-data";
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import { postGuestMessageToStore } from "@/lib/guest-chat-data";
+import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ export async function POST(
   context: RouteContext<"/api/guest/rooms/[roomId]/messages">,
 ) {
   try {
-    const { roomId } = await context.params;
+    const { roomId: accessToken } = await context.params;
     const payload = (await request.json()) as GuestMessagePayload;
 
     if (!payload.body?.trim()) {
@@ -22,8 +23,24 @@ export async function POST(
     }
 
     const mode = payload.mode === "human" ? "human" : "ai";
-    const storedLanguage = await getStoredGuestLanguage(roomId);
-    const stayStatus = await getGuestStayStatusFromStore(roomId, storedLanguage);
+    let access;
+
+    try {
+      access = await resolveGuestAccess(accessToken);
+    } catch {
+      return Response.json({ error: "INVALID_ROOM_TOKEN" }, { status: 401 });
+    }
+
+    if (!access) {
+      return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
+    }
+
+    const storedLanguage = await getStoredGuestLanguage(accessToken);
+    const stayStatus = await getGuestStayStatusFromStore(
+      access.roomId,
+      storedLanguage,
+      access.hotelId,
+    );
 
     if (!stayStatus) {
       return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });

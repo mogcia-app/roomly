@@ -1,0 +1,183 @@
+{
+  "frontDeskHours": [
+    "フロント対応時間は24時間です。"
+  ],
+  "wifiNetworks": [
+    {
+      "floor": "1階",
+      "ssid": "Roomly-Guest-1F",
+      "password": "roomly-1f-2025",
+      "note": "ロビーやフロント付近でご利用いただけます。"
+    },
+    {
+      "floor": "2階",
+      "ssid": "Roomly-Guest-2F",
+      "password": "roomly-2f-2025",
+      "note": "客室ではこちらを優先してください。"
+    },
+    {
+      "floor": "3階",
+      "ssid": "Roomly-Guest-3F",
+      "password": "roomly-3f-2025",
+      "note": "つながりにくい場合はフロントへご確認ください。"
+    }
+  ],
+  "breakfastEntries": [
+    {
+      "style": "和洋ビュッフェ",
+      "hours": "7:00〜9:30",
+      "location": "1階レストラン",
+      "price": "宿泊料金に含む",
+      "reservationRequired": false,
+      "note": "最終入場は9:00です。"
+    }
+  ],
+  "bathEntries": [
+    {
+      "name": "大浴場",
+      "hours": "15:00〜24:00 / 6:00〜9:00",
+      "location": "2階",
+      "note": "タオルは客室からお持ちください。"
+    }
+  ],
+  "facilityEntries": [
+    {
+      "name": "コインランドリー",
+      "hours": "24時間",
+      "note": "洗剤は自動投入です。"
+    },
+    {
+      "name": "自動販売機",
+      "hours": "24時間",
+      "note": "ソフトドリンクのみです。"
+    }
+  ],
+  "facilityLocationEntries": [
+    {
+      "name": "製氷機",
+      "floor": "3階",
+      "note": "エレベーターホール横です。"
+    },
+    {
+      "name": "コインランドリー",
+      "floor": "2階",
+      "note": "大浴場の手前です。"
+    },
+    {
+      "name": "自動販売機",
+      "floor": "1階",
+      "note": "フロント横です。"
+    }
+  ],
+  "amenityEntries": [
+    {
+      "name": "追加タオル",
+      "inRoom": false,
+      "availableOnRequest": true,
+      "requestMethod": "チャットから依頼",
+      "price": "無料",
+      "note": "混雑時はお時間をいただく場合があります。"
+    },
+    {
+      "name": "歯ブラシ",
+      "inRoom": true,
+      "availableOnRequest": true,
+      "requestMethod": "チャットから依頼",
+      "price": "無料",
+      "note": "追加分も無料です。"
+    },
+    {
+      "name": "ヘアブラシ",
+      "inRoom": false,
+      "availableOnRequest": true,
+      "requestMethod": "フロントへ依頼",
+      "price": "無料",
+      "note": null
+    }
+  ],
+  "parkingEntries": [
+    {
+      "name": "ホテル駐車場",
+      "capacity": "20台",
+      "price": "1泊1000円",
+      "hours": "24時間",
+      "reservationRequired": true,
+      "location": "ホテル裏手",
+      "note": "満車時は提携駐車場をご案内します。"
+    }
+  ],
+  "emergencyEntries": [
+    {
+      "category": "医療・体調不良",
+      "contact": "フロント内線9 / 099-000-0001",
+      "steps": "まずフロントへ連絡してください。必要に応じて救急連携を行います。",
+      "note": "重篤な場合は119番通報を優先してください。"
+    },
+    {
+      "category": "火災・事故",
+      "contact": "フロント内線9 / 099-000-0001",
+      "steps": "ただちにフロントへ連絡し、館内放送と避難誘導に従ってください。",
+      "note": "エレベーターは使用しないでください。"
+    }
+  ],
+  "faqEntries": [
+    {
+      "question": "チェックアウトは何時ですか？",
+      "answer": "チェックアウトは10:00です。"
+    },
+    {
+      "question": "Wi-Fi はどれですか？",
+      "answer": "ご宿泊フロアに応じた Roomly-Guest のネットワークをご利用ください。"
+    },
+    {
+      "question": "タクシーを呼べますか？",
+      "answer": "チャットからタクシー手配をご依頼いただけます。"
+    }
+  ],
+  "checkoutEntries": [
+    {
+      "time": "10:00",
+      "method": "フロント精算",
+      "keyReturnLocation": "1階フロント",
+      "lateCheckoutPolicy": "1時間ごとに追加料金",
+      "note": "ご希望の場合は事前にご相談ください。"
+    }
+  ],
+  "roomServiceEntries": [
+    {
+      "menuName": "軽食メニュー",
+      "price": "800円〜",
+      "orderMethod": "フロントへ内線またはチャット",
+      "hours": "18:00〜22:00",
+      "note": "混雑時は提供に時間がかかります。"
+    }
+  ],
+  "transportEntries": [
+    {
+      "companyName": "Roomly Taxi",
+      "serviceType": "タクシー",
+      "phone": "099-111-1111",
+      "hours": "24時間",
+      "priceNote": "行き先により変動",
+      "note": "チャットから手配依頼も可能です。"
+    }
+  ],
+  "nearbySpotEntries": [
+    {
+      "name": "ファミリーマート",
+      "category": "コンビニ",
+      "distance": "徒歩3分",
+      "hours": "24時間",
+      "location": "ホテルを出て右手",
+      "note": null
+    },
+    {
+      "name": "中央駅",
+      "category": "駅",
+      "distance": "徒歩8分",
+      "hours": null,
+      "location": "ホテルを出て直進",
+      "note": null
+    }
+  ]
+}

@@ -1,31 +1,74 @@
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 
-export default function Home() {
+import { resolveGuestAccess } from "@/lib/server/room-token";
+
+type HomePageProps = {
+  searchParams: Promise<{
+    token?: string;
+  }>;
+};
+
+export default async function Home({ searchParams }: HomePageProps) {
+  const { token } = await searchParams;
+  const trimmedToken = token?.trim();
+
+  if (trimmedToken) {
+    try {
+      await resolveGuestAccess(trimmedToken);
+    } catch {
+      notFound();
+    }
+
+    redirect(`/guest/${encodeURIComponent(trimmedToken)}`);
+  }
+
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f8efec_0%,#ffffff_40%,#f3efec_100%)] text-[#241714]">
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-6">
-        <section className="rounded-[32px] border border-[#edd9d5] bg-white px-5 py-7 shadow-[0_18px_80px_rgba(90,59,41,0.1)]">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.32em] text-[#ad2218]">
-            Roomly
-          </div>
+    <div className="min-h-screen bg-[#f4f5f8] text-[#171a22]">
+      <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-5 py-6">
+        <section className="w-full rounded-[38px] bg-white px-7 pb-8 pt-6 shadow-[0_30px_80px_rgba(32,42,67,0.10)]">
+          <div className="flex min-h-[calc(100vh-8.5rem)] flex-col justify-between py-8">
+            <div className="pt-6 text-center">
+              <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-[30px] bg-white ring-1 ring-[#eef0f5]">
+                <img
+                  src="/icon1.png?v=2"
+                  alt="Roomly icon"
+                  width={88}
+                  height={88}
+                  className="h-[88px] w-[88px] object-contain"
+                />
+              </div>
 
-          <h1 className="mt-4 text-3xl font-semibold leading-[1.2] tracking-tight text-[#261915]">
-            フロントに
-            <br />
-            連絡できます
-          </h1>
+              <div className="mt-8 text-[2.35rem] font-light tracking-[0.04em] text-[#171a22]">
+                <span>Roomly</span>
+                <span className="text-[#ad2218]">.</span>
+              </div>
+              <p className="mt-3 text-[15px] font-light leading-7 text-[#8b92a3]">
+                Better way to reach your front desk
+              </p>
 
-          <p className="mt-3 text-sm leading-7 text-[#72574d]">
-            言語を選んで、そのままチャットを開始してください。
-          </p>
+              <h1 className="mt-12 text-[1.85rem] font-light leading-[1.18] tracking-[-0.04em] text-[#171a22]">
+                客室からそのまま
+                <br />
+                フロントにつながる
+              </h1>
+            </div>
 
-          <div className="mt-6 grid gap-3">
-            <Link
-              href="/guest/203/language"
-              className="flex h-14 items-center justify-center rounded-full bg-[#ad2218] px-6 text-base font-semibold text-white transition hover:bg-[#941b13]"
-            >
-              言語選択へ進む
-            </Link>
+            <div className="space-y-4 pt-10">
+              <Link
+                href="/guest/203/language"
+                className="flex h-14 items-center justify-center rounded-none bg-[linear-gradient(180deg,#c32a1f_0%,#ad2218_100%)] text-[15px] font-light tracking-[0.16em] text-white transition hover:brightness-[0.98]"
+              >
+                START
+              </Link>
+              <div className="px-5 py-4 text-center text-[13px] font-light leading-6 text-[#8b92a3]">
+                アプリ不要
+                <br />
+                客室QRを読み込むだけで
+                <br />
+                そのままフロントとのチャットを開始できます
+              </div>
+            </div>
           </div>
         </section>
       </main>

@@ -1,0 +1,79 @@
+{
+  "enabled": true,
+  "version": 1,
+  "imageUrl": "/guest-rich-menu-default.svg",
+  "imageWidth": 1200,
+  "imageHeight": 810,
+  "items": [
+    {
+      "id": "official-site",
+      "label": "公式HP",
+      "x": 0,
+      "y": 0,
+      "width": 600,
+      "height": 270,
+      "actionType": "external_link",
+      "visible": true,
+      "sortOrder": 1,
+      "url": "https://example.com"
+    },
+    {
+      "id": "instagram",
+      "label": "Instagram",
+      "x": 600,
+      "y": 0,
+      "width": 600,
+      "height": 270,
+      "actionType": "external_link",
+      "visible": true,
+      "sortOrder": 2,
+      "url": "https://instagram.com/example"
+    },
+    {
+      "id": "taxi",
+      "label": "タクシー手配",
+      "x": 0,
+      "y": 270,
+      "width": 600,
+      "height": 270,
+      "actionType": "handoff_category",
+      "visible": true,
+      "sortOrder": 3,
+      "handoffCategory": "タクシー手配"
+    },
+    {
+      "id": "amenity",
+      "label": "アメニティ依頼",
+      "x": 600,
+      "y": 270,
+      "width": 600,
+      "height": 270,
+      "actionType": "handoff_category",
+      "visible": true,
+      "sortOrder": 4,
+      "handoffCategory": "アメニティ依頼"
+    },
+    {
+      "id": "language",
+      "label": "言語変更",
+      "x": 0,
+      "y": 540,
+      "width": 600,
+      "height": 270,
+      "actionType": "language",
+      "visible": true,
+      "sortOrder": 5
+    },
+    {
+      "id": "front",
+      "label": "フロントに聞く",
+      "x": 600,
+      "y": 540,
+      "width": 600,
+      "height": 270,
+      "actionType": "human_handoff",
+      "visible": true,
+      "sortOrder": 6
+    }
+  ]
+}

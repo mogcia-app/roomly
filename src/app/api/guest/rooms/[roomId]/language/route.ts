@@ -6,12 +6,15 @@ import {
   isGuestLanguage,
 } from "@/lib/guest-demo";
 import { getGuestStayStatusFromStore } from "@/lib/guest-data";
+import { resolveGuestAccess } from "@/lib/server/room-token";
+
+export const runtime = "nodejs";
 
 export async function POST(
   request: Request,
   context: RouteContext<"/api/guest/rooms/[roomId]/language">,
 ) {
-  const { roomId } = await context.params;
+  const { roomId: accessToken } = await context.params;
   const body = (await request.json()) as { language?: string };
 
   if (!isGuestLanguage(body.language)) {
@@ -21,8 +24,30 @@ export async function POST(
     );
   }
 
-  const currentLanguage = await getStoredGuestLanguage(roomId);
-  const stayStatus = await getGuestStayStatusFromStore(roomId, currentLanguage);
+  let access;
+
+  try {
+    access = await resolveGuestAccess(accessToken);
+  } catch {
+    return Response.json(
+      { error: "INVALID_ROOM_TOKEN" },
+      { status: 401 },
+    );
+  }
+
+  if (!access) {
+    return Response.json(
+      { error: "ROOM_NOT_FOUND" },
+      { status: 404 },
+    );
+  }
+
+  const currentLanguage = await getStoredGuestLanguage(accessToken);
+  const stayStatus = await getGuestStayStatusFromStore(
+    access.roomId,
+    currentLanguage,
+    access.hotelId,
+  );
 
   if (!stayStatus) {
     return Response.json(
@@ -38,11 +63,10 @@ export async function POST(
     );
   }
 
-  await setStoredGuestLanguage(roomId, body.language);
+  await setStoredGuestLanguage(accessToken, body.language);
 
   return Response.json({
     ok: true,
-    roomId,
     language: body.language,
   });
 }

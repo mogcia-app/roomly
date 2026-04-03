@@ -36,6 +36,10 @@ function getServiceAccount() {
   return null;
 }
 
+export function hasFirebaseAdminCredentials() {
+  return getServiceAccount() !== null;
+}
+
 function getAdminApp(): App {
   const existingApp = getApps()[0];
 

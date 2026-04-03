@@ -3,10 +3,25 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import type { GuestMessage } from "@/lib/guest-demo";
+import {
+  GUEST_RICH_MENU_ACTION_REQUIREMENTS,
+  isGuestRichMenuActionType,
+} from "@/lib/guest-contract";
+import {
+  getGuestUiCopy,
+  type GuestLanguage,
+  type GuestMessage,
+} from "@/lib/guest-demo";
+import {
+  type GuestRichMenu,
+  type GuestRichMenuItem,
+} from "@/lib/guest-rich-menu";
 
 type GuestChatExperienceProps = {
   roomId: string;
+  roomLabel: string;
+  richMenu: GuestRichMenu | null;
+  language: GuestLanguage;
   mode: "ai" | "human";
   prompts: string[];
   initialMessages: GuestMessage[];
@@ -18,74 +33,128 @@ type DisplayMessage = GuestMessage & {
 
 type GuestChatComposerProps = {
   roomId: string;
+  language: GuestLanguage;
   mode: "ai" | "human";
+  richMenu: GuestRichMenu | null;
   prompts: string[];
   onOptimisticSend: (message: DisplayMessage) => void;
 };
 
 type StarterActionsProps = {
   roomId: string;
+  roomLabel?: string;
+  language: GuestLanguage;
   onOptimisticSend: (message: DisplayMessage) => void;
 };
-
-type ChatAssistBarProps = {
-  roomId: string;
-  mode: "ai" | "human";
-  onOptimisticSend: (message: DisplayMessage) => void;
-};
-
-const requestCategories = [
-  "歯ブラシ希望",
-  "タオル追加",
-  "清掃・片付け",
-  "その他の依頼",
-] as const;
 let optimisticMessageSequence = 0;
 
-function formatDayLabel(timestamp: string | null) {
-  if (!timestamp) {
-    return "今日";
+function shouldOfferHumanHandoff(message: GuestMessage) {
+  if (message.sender !== "ai" && message.sender !== "system") {
+    return false;
   }
 
-  return new Intl.DateTimeFormat("ja-JP", {
+  return (
+    message.body.includes("フロントへご確認ください") ||
+    message.body.includes("フロントへおつなぎ") ||
+    message.body.includes("Please check with the front desk") ||
+    message.body.includes("请向前台确认") ||
+    message.body.includes("프런트로 확인")
+  );
+}
+
+function getGuestLocale(language: GuestLanguage) {
+  if (language === "en") {
+    return "en-US";
+  }
+
+  if (language === "zh-CN") {
+    return "zh-CN";
+  }
+
+  if (language === "ko") {
+    return "ko-KR";
+  }
+
+  return "ja-JP";
+}
+
+function formatDayLabel(timestamp: string | null, language: GuestLanguage) {
+  if (!timestamp) {
+    return getGuestUiCopy(language).todayLabel;
+  }
+
+  return new Intl.DateTimeFormat(getGuestLocale(language), {
     month: "numeric",
     day: "numeric",
     weekday: "short",
+    timeZone: "Asia/Tokyo",
   }).format(new Date(timestamp));
 }
 
-function formatTimeLabel(timestamp: string | null) {
+function formatTimeLabel(timestamp: string | null, language: GuestLanguage) {
   if (!timestamp) {
     return "";
   }
 
-  return new Intl.DateTimeFormat("ja-JP", {
+  return new Intl.DateTimeFormat(getGuestLocale(language), {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Tokyo",
   }).format(new Date(timestamp));
 }
 
-function senderLabel(sender: GuestMessage["sender"]) {
+function senderLabel(sender: GuestMessage["sender"], language: GuestLanguage) {
+  const ui = getGuestUiCopy(language);
+
   if (sender === "ai") {
-    return "AI";
+    return ui.aiLabel;
   }
 
   if (sender === "front") {
-    return "フロント";
+    return ui.frontLabel;
   }
 
   return "";
 }
 
+function senderAvatar(sender: GuestMessage["sender"], language: GuestLanguage) {
+  if (sender === "front") {
+      return {
+        kind: "text" as const,
+        label:
+          language === "en" ? "F" : language === "zh-CN" ? "前" : language === "ko" ? "프" : "フ",
+      className: "bg-white text-[#6f564b]",
+    };
+  }
+
+  if (sender === "ai") {
+    return {
+      kind: "image" as const,
+      label: "AI",
+      className: "bg-white text-[#6f564b]",
+    };
+  }
+
+  return {
+    kind: "text" as const,
+    label: "案",
+    className: "bg-white text-[#6f564b]",
+  };
+}
+
 function shouldShowDateSeparator(
   current: DisplayMessage,
   previous: DisplayMessage | undefined,
+  language: GuestLanguage,
 ) {
   if (!previous) {
     return true;
   }
 
-  return formatDayLabel(current.timestamp) !== formatDayLabel(previous.timestamp);
+  return (
+    formatDayLabel(current.timestamp, language) !==
+    formatDayLabel(previous.timestamp, language)
+  );
 }
 
 function createOptimisticMessage(
@@ -106,13 +175,17 @@ function createOptimisticMessage(
 
 function GuestChatInput({
   roomId,
+  language,
   mode,
+  richMenu,
   prompts,
   onOptimisticSend,
 }: GuestChatComposerProps) {
   const router = useRouter();
+  const ui = getGuestUiCopy(language);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isRichMenuOpen, setIsRichMenuOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   async function submitMessage(body: string) {
@@ -138,7 +211,7 @@ function GuestChatInput({
     });
 
     if (!response.ok) {
-      setError("メッセージを送信できませんでした。再度お試しください。");
+      setError(ui.messageSendError);
       return;
     }
 
@@ -147,123 +220,258 @@ function GuestChatInput({
     });
   }
 
-  return (
-    <section className="sticky bottom-0 border-t border-black/5 bg-[#f6f1eb] px-3 py-2 backdrop-blur lg:px-5 lg:py-2">
-      <div className="mb-2 flex gap-2 overflow-x-auto pb-1 lg:mb-1.5">
-        {prompts.map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            disabled={isPending}
-            onClick={() => submitMessage(prompt)}
-            className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-[#5d463d] shadow-[0_2px_8px_rgba(72,47,35,0.06)] transition disabled:opacity-60 lg:px-3 lg:py-1 lg:text-[11px]"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
+  async function submitRichMenuAction(action: GuestRichMenuItem) {
+    setError(null);
 
-      <div className="rounded-[26px] bg-white p-2 shadow-[0_4px_18px_rgba(72,47,35,0.08)] lg:rounded-[22px] lg:p-1.5">
-        <label htmlFor="guest-message" className="sr-only">
-          メッセージ
-        </label>
-        <div className="flex items-end gap-2">
-          <textarea
-            id="guest-message"
-            rows={1}
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="メッセージを入力"
-            className="min-h-[44px] flex-1 resize-none rounded-[18px] border border-transparent bg-[#f7f7f7] px-4 py-3 text-sm text-[#2d211d] outline-none lg:min-h-[40px] lg:rounded-[16px] lg:px-3.5 lg:py-2.5"
-          />
-          <button
-            type="button"
-            disabled={!message.trim() || isPending}
-            onClick={() => submitMessage(message)}
-            className="flex h-11 min-w-11 items-center justify-center rounded-full bg-[#ad2218] px-4 text-sm font-semibold text-white disabled:opacity-60 lg:h-10 lg:min-w-10 lg:px-3.5 lg:text-[12px]"
-          >
-            {isPending ? "..." : "送信"}
-          </button>
-        </div>
-        {error ? (
-          <div className="mt-2 rounded-[18px] border border-[#f0c8c2] bg-[#fff3ef] px-4 py-3 text-sm text-[#8e2219]">
-            {error}
+    if (!isGuestRichMenuActionType(action.actionType)) {
+      console.warn("[guest/rich-menu] unsupported action", {
+        roomId,
+        actionId: action.id,
+        actionType: action.actionType,
+      });
+      setError(ui.menuUnavailableError);
+      return;
+    }
+
+    const requiredField = GUEST_RICH_MENU_ACTION_REQUIREMENTS[action.actionType];
+
+    if (requiredField && !action[requiredField]) {
+      console.warn("[guest/rich-menu] missing action config", {
+        roomId,
+        actionId: action.id,
+        actionType: action.actionType,
+        requiredField,
+      });
+      setError(ui.menuUnavailableError);
+      return;
+    }
+
+    if (action.actionType === "external_link" && action.url) {
+      window.open(action.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    if (action.actionType === "ai_prompt" && action.prompt) {
+      onOptimisticSend(createOptimisticMessage("rich-prompt", "guest", action.prompt));
+
+      const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body: action.prompt,
+          mode: "ai",
+        }),
+      });
+
+      if (!response.ok) {
+        setError(ui.messageSendError);
+        return;
+      }
+
+      startTransition(() => {
+        if (mode !== "ai") {
+          router.push(`/guest/${roomId}/chat?mode=ai`);
+        } else {
+          router.refresh();
+        }
+      });
+      return;
+    }
+
+    if (
+      action.actionType === "handoff_category" &&
+      action.handoffCategory
+    ) {
+      onOptimisticSend(
+        createOptimisticMessage("handoff-category", "guest", action.handoffCategory),
+      );
+
+      const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ category: action.handoffCategory }),
+      });
+
+      if (!response.ok) {
+        setError(ui.handoffError);
+        return;
+      }
+
+      startTransition(() => {
+        router.push(`/guest/${roomId}/chat?mode=human`);
+      });
+      return;
+    }
+
+    if (action.actionType === "human_handoff") {
+      const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        setError(ui.handoffError);
+        return;
+      }
+
+      startTransition(() => {
+        router.push(`/guest/${roomId}/chat?mode=human`);
+      });
+      return;
+    }
+
+    if (action.actionType === "language") {
+      startTransition(() => {
+        router.push(`/guest/${roomId}/language`);
+      });
+      return;
+    }
+
+    return;
+  }
+
+  return (
+    <section className="sticky bottom-0 z-20 bg-transparent px-0 pb-0">
+      {richMenu ? (
+        <div
+          className={`grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out ${
+            isRichMenuOpen
+              ? "mb-3 grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="min-h-0">
+            <div className="border border-[#d9cdc7] bg-[#ede3db] p-3">
+              <div
+                className="relative mx-auto w-full overflow-hidden border border-[#e7ddd8] bg-white"
+                style={{
+                  aspectRatio: `${richMenu.imageWidth} / ${richMenu.imageHeight}`,
+                }}
+              >
+                <img
+                  src={richMenu.imageUrl}
+                  alt="Guest rich menu"
+                  className="h-full w-full object-cover"
+                />
+                {richMenu.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={isPending}
+                    aria-label={item.label}
+                    title={item.label}
+                    onClick={() => {
+                      void submitRichMenuAction(item);
+                    }}
+                    className="absolute bg-transparent"
+                    style={{
+                      left: `${(item.x / richMenu.imageWidth) * 100}%`,
+                      top: `${(item.y / richMenu.imageHeight) * 100}%`,
+                      width: `${(item.width / richMenu.imageWidth) * 100}%`,
+                      height: `${(item.height / richMenu.imageHeight) * 100}%`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
-        ) : null}
+        </div>
+      ) : null}
+
+      {prompts.length > 0 ? (
+        <div className="mb-2 flex gap-2 overflow-x-auto px-3 pb-1 lg:mb-2 lg:px-8">
+          {prompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              disabled={isPending}
+              onClick={() => submitMessage(prompt)}
+              className="shrink-0 rounded-full border border-[#e7ddd8] bg-white px-3 py-1.5 text-[12px] font-light text-[#7a6056] shadow-[0_4px_14px_rgba(72,47,35,0.04)] transition disabled:opacity-60 lg:px-3 lg:py-1 lg:text-[11px]"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="border-t border-[#e7ddd8] bg-white">
+        <div className="flex items-center gap-2 px-3 pb-2 pt-2 lg:px-8">
+        <button
+          type="button"
+          aria-expanded={isRichMenuOpen}
+          aria-label="Open quick menu"
+          disabled={!richMenu}
+          onClick={() => {
+            setIsRichMenuOpen((current) => !current);
+          }}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center border transition lg:h-10 lg:w-10 ${
+            !richMenu
+              ? "border-[#ebe1dc] bg-[#f2ece7] text-[#b3a49c]"
+              : isRichMenuOpen
+              ? "border-[#dcc7bf] bg-[#f7e7e1] text-[#8b4c43]"
+              : "border-[#e7ddd8] bg-[#faf5f1] text-[#8f8078]"
+          }`}
+        >
+          <span
+            className={`block text-lg leading-none transition-transform duration-300 ${
+              isRichMenuOpen ? "rotate-90" : "rotate-0"
+            }`}
+          >
+            ›
+          </span>
+        </button>
+
+        <div className="flex-1">
+          <label htmlFor="guest-message" className="sr-only">
+            メッセージ
+          </label>
+          <div className="flex items-center gap-2 p-2">
+            <div className="flex h-10 flex-1 items-center border border-[#e7ddd8] bg-white">
+              <textarea
+                id="guest-message"
+                rows={1}
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder={ui.messagePlaceholder}
+                className="h-10 flex-1 resize-none bg-white px-3 py-2 text-sm leading-5 text-[#5f463d] outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!message.trim() || isPending}
+              onClick={() => submitMessage(message)}
+              className="flex h-10 min-w-[56px] items-center justify-center border border-[#981d15] bg-[#ad2218] px-4 text-sm font-light text-white disabled:opacity-60 lg:h-10 lg:min-w-[56px] lg:px-4 lg:text-[12px]"
+            >
+              {isPending ? "..." : ui.sendLabel}
+            </button>
+          </div>
+          {error ? (
+            <div className="mt-2 rounded-[18px] border border-[#f2d3cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#ad2218]">
+              {error}
+            </div>
+          ) : null}
+        </div>
+        </div>
       </div>
     </section>
   );
 }
 
-function ChatAssistBar({
-  roomId,
-  mode,
-  onOptimisticSend,
-}: ChatAssistBarProps) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  async function connectToFront() {
-    setError(null);
-
-    onOptimisticSend({
-      id: `handoff-assist-${Date.now()}`,
-      sender: "system",
-      body: "担当者に接続中です。返信をお待ちください。",
-      timestamp: new Date().toISOString(),
-      optimistic: true,
-    });
-
-    const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      setError("フロントへの接続に失敗しました。再度お試しください。");
-      return;
-    }
-
-    startTransition(() => {
-      router.push(`/guest/${roomId}/chat?mode=human`);
-    });
-  }
-
-  return (
-    <div className="border-t border-black/5 bg-[#faf6f2] px-3 py-2 lg:px-5">
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        <button
-          type="button"
-          disabled={isPending || mode === "human"}
-          onClick={() => {
-            void connectToFront();
-          }}
-          className={`shrink-0 rounded-full px-3.5 py-2 text-[12px] font-semibold transition ${
-            mode === "human"
-              ? "bg-[#eadfd8] text-[#8b7369]"
-              : "bg-white text-[#5d463d] shadow-[0_2px_10px_rgba(72,47,35,0.08)]"
-          } disabled:opacity-60`}
-        >
-          {mode === "human" ? "フロント対応中" : "フロントにつなぐ"}
-        </button>
-      </div>
-      {error ? (
-        <div className="mt-2 rounded-[14px] border border-[#f0c8c2] bg-[#fff3ef] px-3 py-2 text-[12px] text-[#8e2219]">
-          {error}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function StarterActions({
   roomId,
+  roomLabel,
+  language,
   onOptimisticSend,
 }: StarterActionsProps) {
   const router = useRouter();
+  const ui = getGuestUiCopy(language);
   const [isRequestOptionsOpen, setIsRequestOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -285,7 +493,7 @@ function StarterActions({
     });
 
     if (!response.ok) {
-      setError("AIへの問い合わせ開始に失敗しました。再度お試しください。");
+      setError(ui.aiStarterError);
       return;
     }
 
@@ -311,7 +519,7 @@ function StarterActions({
     });
 
     if (!response.ok) {
-      setError("フロントへの通知に失敗しました。再度お試しください。");
+      setError(ui.handoffError);
       return;
     }
 
@@ -321,75 +529,80 @@ function StarterActions({
   }
 
   return (
-    <div className="mb-4 ml-1 max-w-[82%] lg:max-w-[52%]">
-      <div className="mb-1 text-[11px] font-medium text-black/55">AI</div>
-      <div className="rounded-[22px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_6px_20px_rgba(72,47,35,0.06)] lg:rounded-[18px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-        ご用件をお聞かせください。内容に合わせてご案内します。
-      </div>
-      <div className="mt-3 space-y-2">
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => {
-            setIsRequestOptionsOpen((current) => !current);
-          }}
-          className="flex w-full items-center gap-3 rounded-[18px] bg-white px-3.5 py-3 text-left shadow-[0_4px_18px_rgba(72,47,35,0.08)] transition disabled:opacity-60"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#fff3ef] text-lg">
-            🧺
+    <div className="mb-5">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-[12px] font-light text-[#6f564b] shadow-[0_8px_20px_rgba(72,47,35,0.06)]">
+          <img
+            src="/icon1.png"
+            alt="AI assistant icon"
+            width={32}
+            height={32}
+            className="h-6 w-6 object-cover"
+          />
+        </div>
+        <div className="max-w-[82%] rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:max-w-[48%] xl:max-w-[42%]">
+          <div className="whitespace-pre-line">
+            {roomLabel ? `${roomLabel}様\n` : ""}
+            {ui.introMessage}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-[#251815]">お届け・ご依頼</div>
-            <div className="mt-0.5 text-xs leading-5 text-[#7a6056]">
-              アメニティ追加などをフロントへ送ります
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setIsRequestOptionsOpen((current) => !current);
+              }}
+              className="flex w-full items-start rounded-[18px] border border-[#e7ddd8] bg-white px-3.5 py-3 text-left transition disabled:opacity-60"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-light text-[#251815]">{ui.deliveryTitle}</div>
+                <div className="mt-0.5 text-xs leading-5 text-[#7a6056]">
+                  {ui.deliveryDescription}
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                void sendAiStarter(ui.roomGuideStarterBody);
+              }}
+              className="flex w-full items-start rounded-[18px] border border-[#e7ddd8] bg-[#fffaf7] px-3.5 py-3 text-left transition disabled:opacity-60"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-light text-[#251815]">{ui.roomGuideTitle}</div>
+                <div className="mt-0.5 text-xs leading-5 text-[#7a6056]">
+                  {ui.roomGuideDescription}
+                </div>
+              </div>
+            </button>
+          </div>
+          {isRequestOptionsOpen ? (
+            <div className="mt-2 rounded-[18px] border border-[#ebe1dc] bg-[#fffaf7] px-3 py-3">
+              <div className="mb-2 text-[12px] font-light text-[#7a554a]">
+                {ui.requestPrompt}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ui.requestCategories.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      void startHumanRequest(category);
+                    }}
+                    className="rounded-full border border-[#e7ddd8] bg-white px-3 py-1.5 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="text-lg text-[#b2867a]">›</div>
-        </button>
-        {isRequestOptionsOpen ? (
-          <div className="rounded-[18px] bg-[#fff8f6] px-3 py-3 shadow-[0_4px_18px_rgba(72,47,35,0.05)]">
-            <div className="mb-2 text-[12px] font-medium text-[#7a554a]">
-              ご依頼内容を選んでください
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {requestCategories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => {
-                    void startHumanRequest(category);
-                  }}
-                  className="rounded-full border border-[#eaded9] bg-white px-3 py-1.5 text-[12px] font-medium text-[#7a554a] disabled:opacity-60"
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => {
-            void sendAiStarter("館内設備やお部屋の使い方を教えてください。");
-          }}
-          className="flex w-full items-center gap-3 rounded-[18px] bg-white px-3.5 py-3 text-left shadow-[0_4px_18px_rgba(72,47,35,0.08)] transition disabled:opacity-60"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#f5f1ee] text-lg">
-            💬
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-[#251815]">館内・お部屋のご案内</div>
-            <div className="mt-0.5 text-xs leading-5 text-[#7a6056]">
-              まずはAIがその場でご案内します
-            </div>
-          </div>
-          <div className="text-lg text-[#b2867a]">›</div>
-        </button>
+          ) : null}
+        </div>
       </div>
       {error ? (
-        <div className="mt-2 rounded-[16px] border border-[#f0c8c2] bg-[#fff3ef] px-4 py-3 text-sm text-[#8e2219]">
+        <div className="mt-2 ml-[52px] rounded-[16px] border border-[#f2d3cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#ad2218]">
           {error}
         </div>
       ) : null}
@@ -397,23 +610,101 @@ function StarterActions({
   );
 }
 
-function HumanStarter() {
+function HumanStarter({ language }: { language: GuestLanguage }) {
+  const ui = getGuestUiCopy(language);
+
   return (
-    <div className="mb-4 ml-1 max-w-[82%] lg:max-w-[52%]">
-      <div className="mb-1 text-[11px] font-medium text-black/55">フロント</div>
-      <div className="rounded-[22px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_6px_20px_rgba(72,47,35,0.06)] lg:rounded-[18px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-        担当者に接続中です。内容を確認ししだい返信します。
+    <div className="mb-5 flex items-start gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[12px] font-light text-[#6f564b] shadow-[0_8px_20px_rgba(72,47,35,0.06)]">
+        {senderAvatar("front", language).label}
       </div>
+      <div className="max-w-[82%] rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:max-w-[48%] xl:max-w-[42%]">
+        {ui.humanStarterMessage}
+      </div>
+    </div>
+  );
+}
+
+function HumanHandoffCta({
+  roomId,
+  language,
+  onOptimisticSend,
+}: StarterActionsProps) {
+  const router = useRouter();
+  const ui = getGuestUiCopy(language);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  async function requestHandoff() {
+    setError(null);
+    const requestLabel =
+      language === "en"
+        ? "Please connect me to the front desk."
+        : language === "zh-CN"
+          ? "请帮我联系前台。"
+          : language === "ko"
+            ? "프런트로 연결해 주세요."
+            : "フロント対応をお願いします。";
+
+    onOptimisticSend(
+      createOptimisticMessage("handoff-request", "guest", requestLabel),
+    );
+
+    const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      setError(ui.handoffError);
+      return;
+    }
+
+    startTransition(() => {
+      router.push(`/guest/${roomId}/chat?mode=human`);
+    });
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => {
+          void requestHandoff();
+        }}
+        className="w-full rounded-[18px] border border-[#e7ddd8] bg-white px-4 py-3 text-sm font-light text-[#7a554a] shadow-[0_8px_20px_rgba(72,47,35,0.04)] transition hover:bg-[#fffaf7] disabled:opacity-60"
+      >
+        {language === "en"
+          ? "Ask the front desk"
+          : language === "zh-CN"
+            ? "联系前台"
+            : language === "ko"
+              ? "프런트에 문의"
+              : "フロントに聞く"}
+      </button>
+      {error ? (
+        <div className="mt-2 rounded-[16px] border border-[#f2d3cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#ad2218]">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 export function GuestChatExperience({
   roomId,
+  roomLabel,
+  richMenu,
+  language,
   mode,
   prompts,
   initialMessages,
 }: GuestChatExperienceProps) {
+  const ui = getGuestUiCopy(language);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -430,13 +721,18 @@ export function GuestChatExperience({
         (message) =>
           !(
             message.sender === "ai" &&
-            message.body === "ご用件をお聞かせください。下の候補から選ぶか、そのまま入力してください。"
+            message.id === "ai-1"
           ),
       );
     }
 
     return messages;
   }, [hasGuestMessage, messages, mode]);
+  const latestAssistMessage = [...visibleMessages]
+    .reverse()
+    .find((message) => message.sender === "ai" || message.sender === "system");
+  const showHumanHandoffCta =
+    mode === "ai" && latestAssistMessage ? shouldOfferHumanHandoff(latestAssistMessage) : false;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -444,17 +740,19 @@ export function GuestChatExperience({
 
   return (
     <>
-      <section className="flex-1 overflow-y-auto bg-[#e6ddd5] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.32),transparent_20%),linear-gradient(0deg,rgba(255,255,255,0.08),rgba(255,255,255,0.08))] px-3 py-4 lg:px-6 lg:py-3">
+      <section className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
         {!hasGuestMessage && mode === "ai" ? (
           <StarterActions
             roomId={roomId}
+            roomLabel={roomLabel}
+            language={language}
             onOptimisticSend={(message) => {
               setOptimisticMessages((current) => [...current, message]);
             }}
           />
         ) : null}
         {!hasGuestMessage && mode === "human" && !hasNonSystemHistory ? (
-          <HumanStarter />
+          <HumanStarter language={language} />
         ) : null}
         <div className="space-y-3 lg:space-y-2.5">
           {visibleMessages.map((message, index) => {
@@ -464,44 +762,65 @@ export function GuestChatExperience({
 
             return (
               <div key={message.id}>
-                {shouldShowDateSeparator(message, previous) ? (
+                {shouldShowDateSeparator(message, previous, language) ? (
                   <div className="mb-3 flex justify-center">
-                    <div className="rounded-full bg-white/85 px-3 py-1 text-[11px] font-medium text-[#7a6056]">
-                      {formatDayLabel(message.timestamp)}
+                    <div className="rounded-full bg-[#d8dee9] px-3 py-1 text-[11px] font-light text-[#56657f]">
+                      {formatDayLabel(message.timestamp, language)}
                     </div>
                   </div>
                 ) : null}
                 <div className={`flex ${isGuest ? "justify-end" : "justify-start"}`}>
-                  <div className="max-w-[82%] lg:max-w-[60%]">
-                    {!isGuest && !isSystem ? (
-                      <div className="mb-1 ml-1 text-[11px] font-medium text-black/55 lg:text-[10px]">
-                        {senderLabel(message.sender)}
+                  {isGuest ? (
+                    <div className="max-w-[86%] lg:max-w-[48%] xl:max-w-[42%]">
+                      <div className="rounded-[24px] rounded-br-md bg-[#06c755] px-4 py-3 text-sm leading-6 text-white shadow-[0_14px_28px_rgba(6,199,85,0.18)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
+                        {message.body}
                       </div>
-                    ) : null}
-                    <div
-                      className={`rounded-[22px] px-4 py-3 text-sm leading-6 shadow-[0_6px_20px_rgba(72,47,35,0.06)] lg:rounded-[18px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5 ${
-                        isSystem
-                          ? "bg-[#f9efe9] text-[#8e2219]"
-                          : isGuest
-                            ? "rounded-br-md bg-[#ad2218] text-white"
-                            : "rounded-bl-md bg-white text-[#33231e]"
-                      }`}
-                    >
-                      {message.body}
-                    </div>
-                    <div
-                      className={`mt-1 flex text-[11px] lg:text-[10px] ${
-                        isGuest ? "justify-end text-[#8a6d63]" : "justify-start text-[#8a6d63]"
-                      }`}
-                    >
-                      <span>{formatTimeLabel(message.timestamp)}</span>
-                      {isGuest ? (
-                        <span className="ml-2 font-medium">
-                          {message.optimistic ? "送信中..." : "既読"}
+                      <div className="mt-1 flex justify-end text-[11px] text-[#8b776e] lg:text-[10px]">
+                        <span>{formatTimeLabel(message.timestamp, language)}</span>
+                        <span className="ml-2 font-light">
+                          {message.optimistic ? ui.sendingLabel : ui.readLabel}
                         </span>
-                      ) : null}
+                      </div>
                     </div>
-                  </div>
+                  ) : isSystem ? (
+                    <div className="max-w-[88%] lg:max-w-[52%] xl:max-w-[46%]">
+                      <div className="rounded-[24px] bg-white px-4 py-3 text-sm leading-6 text-[#8d4d47] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
+                        {message.body}
+                      </div>
+                      <div className="mt-1 flex justify-start text-[11px] text-[#8b776e] lg:text-[10px]">
+                        <span>{formatTimeLabel(message.timestamp, language)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[12px] font-light shadow-[0_8px_20px_rgba(25,46,89,0.10)] ${senderAvatar(message.sender, language).className}`}
+                      >
+                        {senderAvatar(message.sender, language).kind === "image" ? (
+                          <img
+                            src="/icon1.png"
+                            alt="AI assistant icon"
+                            width={32}
+                            height={32}
+                            className="h-6 w-6 object-cover"
+                          />
+                        ) : (
+                          senderAvatar(message.sender, language).label
+                        )}
+                      </div>
+                      <div className="max-w-[88%] lg:max-w-[52%] xl:max-w-[46%]">
+                        <div className="mb-1 ml-1 text-[11px] font-light text-[#8b776e] lg:text-[10px]">
+                          {senderLabel(message.sender, language)}
+                        </div>
+                        <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_14px_28px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
+                          {message.body}
+                        </div>
+                        <div className="mt-1 flex justify-start text-[11px] text-[#8b776e] lg:text-[10px]">
+                          <span>{formatTimeLabel(message.timestamp, language)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -510,17 +829,23 @@ export function GuestChatExperience({
         </div>
       </section>
 
-      <ChatAssistBar
-        roomId={roomId}
-        mode={mode}
-        onOptimisticSend={(message) => {
-          setOptimisticMessages((current) => [...current, message]);
-        }}
-      />
+      {showHumanHandoffCta ? (
+        <div className="border-t border-[#e7ddd8] bg-[linear-gradient(180deg,#fffdfb_0%,#faf5f1_100%)] px-3 pt-3 lg:px-8">
+          <HumanHandoffCta
+            roomId={roomId}
+            language={language}
+            onOptimisticSend={(message) => {
+              setOptimisticMessages((current) => [...current, message]);
+            }}
+          />
+        </div>
+      ) : null}
 
       <GuestChatInput
         roomId={roomId}
+        language={language}
         mode={mode}
+        richMenu={richMenu}
         prompts={prompts}
         onOptimisticSend={(message) => {
           setOptimisticMessages((current) => [...current, message]);

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:guest-hotel-data": "node tools/seed-guest-hotel-data.mjs"
   },
   "dependencies": {
     "firebase": "^12.11.0",

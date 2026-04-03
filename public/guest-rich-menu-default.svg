@@ -1,0 +1,21 @@
+<svg width="1200" height="810" viewBox="0 0 1200 810" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="810" fill="#E9DDD1"/>
+  <rect x="24" y="24" width="552" height="238" rx="18" fill="#F7F2EC"/>
+  <rect x="624" y="24" width="552" height="238" rx="18" fill="#F7F2EC"/>
+  <rect x="24" y="286" width="552" height="238" rx="18" fill="#F7F2EC"/>
+  <rect x="624" y="286" width="552" height="238" rx="18" fill="#F7F2EC"/>
+  <rect x="24" y="548" width="552" height="238" rx="18" fill="#F7F2EC"/>
+  <rect x="624" y="548" width="552" height="238" rx="18" fill="#F7F2EC"/>
+  <text x="80" y="105" fill="#AD2218" font-family="Arial, sans-serif" font-size="40" font-weight="700">公式HP</text>
+  <text x="80" y="160" fill="#6A5147" font-family="Arial, sans-serif" font-size="24">宿泊案内・アクセス</text>
+  <text x="680" y="105" fill="#AD2218" font-family="Arial, sans-serif" font-size="40" font-weight="700">Instagram</text>
+  <text x="680" y="160" fill="#6A5147" font-family="Arial, sans-serif" font-size="24">館内や周辺の雰囲気</text>
+  <text x="80" y="367" fill="#AD2218" font-family="Arial, sans-serif" font-size="40" font-weight="700">タクシー手配</text>
+  <text x="80" y="422" fill="#6A5147" font-family="Arial, sans-serif" font-size="24">フロントへ依頼を送信</text>
+  <text x="680" y="367" fill="#AD2218" font-family="Arial, sans-serif" font-size="40" font-weight="700">アメニティ依頼</text>
+  <text x="680" y="422" fill="#6A5147" font-family="Arial, sans-serif" font-size="24">追加タオルなど</text>
+  <text x="80" y="629" fill="#AD2218" font-family="Arial, sans-serif" font-size="40" font-weight="700">言語変更</text>
+  <text x="80" y="684" fill="#6A5147" font-family="Arial, sans-serif" font-size="24">表示言語を切り替え</text>
+  <text x="680" y="629" fill="#AD2218" font-family="Arial, sans-serif" font-size="40" font-weight="700">フロントに聞く</text>
+  <text x="680" y="684" fill="#6A5147" font-family="Arial, sans-serif" font-size="24">有人チャットへ切替</text>
+</svg>

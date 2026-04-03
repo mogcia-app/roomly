@@ -1,10 +1,28 @@
 import "server-only";
 
-import { getAdminDb } from "@/lib/firebase-admin";
+import {
+  getAdminDb,
+  hasFirebaseAdminCredentials,
+} from "@/lib/firebase-admin";
+import { GUEST_HEARING_SHEETS_COLLECTION } from "@/lib/guest-contract";
 import {
   getGuestRoomContext,
   getGuestStayStatus,
   isGuestLanguage,
+  type HearingSheetAmenityEntry,
+  type HearingSheetBathEntry,
+  type HearingSheetBreakfastEntry,
+  type HearingSheetCheckoutEntry,
+  type HearingSheetEmergencyEntry,
+  type HearingSheetFacilityEntry,
+  type HearingSheetFacilityLocationEntry,
+  type HearingSheetFaqEntry,
+  type HearingSheetKnowledge,
+  type HearingSheetNearbySpotEntry,
+  type HearingSheetParkingEntry,
+  type HearingSheetRoomServiceEntry,
+  type HearingSheetTransportEntry,
+  type HearingSheetWifiEntry,
   type GuestLanguage,
   type GuestRoomContext,
   type GuestStayStatus,
@@ -19,6 +37,7 @@ type FirestoreRoom = {
   floor?: string | number;
   room_id?: string;
   roomId?: string;
+  [key: string]: unknown;
 };
 
 type FirestoreHotel = {
@@ -35,18 +54,8 @@ type FirestoreStay = {
 
 type FirestoreHearingSheet = {
   categories?: Record<string, unknown>;
+  [key: string]: unknown;
 };
-
-type HearingSheetKnowledge = {
-  wifi: string[];
-  breakfast: string[];
-  amenities: string[];
-  facilities: string[];
-};
-
-function hasFirebaseConfig() {
-  return Boolean(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
-}
 
 function toRoomLabel(roomId: string, roomData?: FirestoreRoom) {
   const roomNumber = roomData?.room_number ?? roomData?.roomNumber ?? roomId;
@@ -57,154 +66,410 @@ function toHotelId(roomData?: FirestoreRoom) {
   return roomData?.hotel_id ?? roomData?.hotelId ?? null;
 }
 
-function extractPromptStrings(value: unknown): string[] {
-  if (!value) {
-    return [];
+function toRoomFloor(roomData?: FirestoreRoom) {
+  const floor = roomData?.floor;
+
+  if (typeof floor === "number") {
+    return `${floor}階`;
   }
 
-  if (typeof value === "string") {
-    return [value];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) => extractPromptStrings(entry));
-  }
-
-  if (typeof value === "object") {
-    return Object.values(value).flatMap((entry) => extractPromptStrings(entry));
-  }
-
-  return [];
-}
-
-function getPromptCandidates(sheet: FirestoreHearingSheet | null) {
-  if (!sheet?.categories) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      extractPromptStrings(sheet.categories)
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0),
-    ),
-  ).slice(0, 6);
-}
-
-function createEmptyKnowledge(): HearingSheetKnowledge {
-  return {
-    wifi: [],
-    breakfast: [],
-    amenities: [],
-    facilities: [],
-  };
-}
-
-function pushKnowledgeValue(target: string[], value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed || target.includes(trimmed)) {
-    return;
-  }
-
-  target.push(trimmed);
-}
-
-function matchKnowledgeCategory(path: string, value: string) {
-  const normalizedPath = path.toLowerCase();
-  const normalizedValue = value.toLowerCase();
-
-  if (
-    normalizedPath.includes("wifi") ||
-    normalizedPath.includes("wi-fi") ||
-    normalizedValue.includes("wifi") ||
-    normalizedValue.includes("wi-fi") ||
-    value.includes("Wi-Fi") ||
-    value.includes("無線LAN")
-  ) {
-    return "wifi" as const;
-  }
-
-  if (
-    normalizedPath.includes("breakfast") ||
-    value.includes("朝食") ||
-    value.includes("レストラン")
-  ) {
-    return "breakfast" as const;
-  }
-
-  if (
-    normalizedPath.includes("amenity") ||
-    value.includes("アメニティ") ||
-    value.includes("歯ブラシ") ||
-    value.includes("タオル") ||
-    value.includes("浴衣") ||
-    value.includes("シャンプー")
-  ) {
-    return "amenities" as const;
-  }
-
-  if (
-    normalizedPath.includes("facility") ||
-    normalizedPath.includes("room") ||
-    value.includes("大浴場") ||
-    value.includes("温泉") ||
-    value.includes("ランドリー") ||
-    value.includes("自販機") ||
-    value.includes("駐車場") ||
-    value.includes("館内") ||
-    value.includes("お部屋") ||
-    value.includes("客室")
-  ) {
-    return "facilities" as const;
+  if (typeof floor === "string" && floor.trim()) {
+    return floor.trim();
   }
 
   return null;
 }
 
-function collectKnowledgeEntries(
-  value: unknown,
-  path: string[],
-  knowledge: HearingSheetKnowledge,
-) {
-  if (typeof value === "string") {
-    const matchedCategory = matchKnowledgeCategory(path.join("."), value);
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
 
-    if (matchedCategory) {
-      pushKnowledgeValue(knowledge[matchedCategory], value);
+  return value as Record<string, unknown>;
+}
+
+function readString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return null;
+}
+
+function readBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    if (["true", "yes", "y", "required", "必要", "要", "あり", "有"].includes(normalized)) {
+      return true;
     }
-    return;
+
+    if (["false", "no", "n", "not_required", "不要", "なし", "無"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+}
+
+function toEntryArray(value: unknown, expectedKeys: string[]): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => toEntryArray(entry, expectedKeys));
+  }
+
+  const record = asRecord(value);
+
+  if (!record) {
+    const text = readString(value);
+    return text ? [{ note: text }] : [];
+  }
+
+  if (expectedKeys.some((key) => key in record)) {
+    return [record];
+  }
+
+  return Object.values(record).flatMap((entry) => toEntryArray(entry, expectedKeys));
+}
+
+function getSheetValue(
+  source: FirestoreHearingSheet | FirestoreRoom | null | undefined,
+  fieldName: string,
+) {
+  if (!source) {
+    return null;
+  }
+
+  const categories = asRecord(source.categories);
+  return source[fieldName] ?? categories?.[fieldName] ?? null;
+}
+
+function createEmptyKnowledge(): HearingSheetKnowledge {
+  return {
+    frontDeskHours: [],
+    wifi: [],
+    breakfast: [],
+    baths: [],
+    facilities: [],
+    facilityLocations: [],
+    amenities: [],
+    parking: [],
+    emergency: [],
+    faq: [],
+    checkout: [],
+    roomService: [],
+    transport: [],
+    nearbySpots: [],
+  };
+}
+
+function dedupeEntries<T>(entries: T[]) {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = JSON.stringify(entry);
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function mergeKnowledge(
+  primary: HearingSheetKnowledge,
+  secondary: HearingSheetKnowledge,
+): HearingSheetKnowledge {
+  return {
+    frontDeskHours: dedupeEntries([...primary.frontDeskHours, ...secondary.frontDeskHours]),
+    wifi: dedupeEntries([...primary.wifi, ...secondary.wifi]),
+    breakfast: dedupeEntries([...primary.breakfast, ...secondary.breakfast]),
+    baths: dedupeEntries([...primary.baths, ...secondary.baths]),
+    facilities: dedupeEntries([...primary.facilities, ...secondary.facilities]),
+    facilityLocations: dedupeEntries([
+      ...primary.facilityLocations,
+      ...secondary.facilityLocations,
+    ]),
+    amenities: dedupeEntries([...primary.amenities, ...secondary.amenities]),
+    parking: dedupeEntries([...primary.parking, ...secondary.parking]),
+    emergency: dedupeEntries([...primary.emergency, ...secondary.emergency]),
+    faq: dedupeEntries([...primary.faq, ...secondary.faq]),
+    checkout: dedupeEntries([...primary.checkout, ...secondary.checkout]),
+    roomService: dedupeEntries([...primary.roomService, ...secondary.roomService]),
+    transport: dedupeEntries([...primary.transport, ...secondary.transport]),
+    nearbySpots: dedupeEntries([...primary.nearbySpots, ...secondary.nearbySpots]),
+  };
+}
+
+function parseFrontDeskHours(value: unknown) {
+  if (!value) {
+    return [];
   }
 
   if (Array.isArray(value)) {
-    value.forEach((entry) => {
-      collectKnowledgeEntries(entry, path, knowledge);
-    });
-    return;
+    return value.map(readString).filter((entry): entry is string => entry !== null);
   }
 
-  if (value && typeof value === "object") {
-    Object.entries(value).forEach(([key, nestedValue]) => {
-      collectKnowledgeEntries(nestedValue, [...path, key], knowledge);
-    });
+  const record = asRecord(value);
+  if (record) {
+    return Object.values(record)
+      .map(readString)
+      .filter((entry): entry is string => entry !== null);
   }
+
+  const text = readString(value);
+  return text ? [text] : [];
 }
 
-function getKnowledgeCandidates(sheet: FirestoreHearingSheet | null) {
-  const knowledge = createEmptyKnowledge();
+function parseWifiNetworks(value: unknown): HearingSheetWifiEntry[] {
+  return toEntryArray(value, ["floor", "ssid", "password", "note"]).map((entry) => ({
+    floor: readString(entry.floor),
+    ssid: readString(entry.ssid),
+    password: readString(entry.password),
+    note: readString(entry.note),
+  }));
+}
 
-  if (!sheet?.categories) {
-    return knowledge;
-  }
+function parseBreakfastEntries(value: unknown): HearingSheetBreakfastEntry[] {
+  return toEntryArray(value, [
+    "style",
+    "hours",
+    "location",
+    "price",
+    "reservationRequired",
+    "reservation_required",
+    "note",
+  ]).map((entry) => ({
+    style: readString(entry.style),
+    hours: readString(entry.hours),
+    location: readString(entry.location),
+    price: readString(entry.price),
+    reservationRequired: readBoolean(
+      entry.reservationRequired ?? entry.reservation_required,
+    ),
+    note: readString(entry.note),
+  }));
+}
 
-  collectKnowledgeEntries(sheet.categories, ["categories"], knowledge);
+function parseBathEntries(value: unknown): HearingSheetBathEntry[] {
+  return toEntryArray(value, ["name", "hours", "location", "note"]).map((entry) => ({
+    name: readString(entry.name),
+    hours: readString(entry.hours),
+    location: readString(entry.location),
+    note: readString(entry.note),
+  }));
+}
 
+function parseFacilityEntries(value: unknown): HearingSheetFacilityEntry[] {
+  return toEntryArray(value, ["name", "hours", "note"]).map((entry) => ({
+    name: readString(entry.name),
+    hours: readString(entry.hours),
+    note: readString(entry.note),
+  }));
+}
+
+function parseFacilityLocationEntries(
+  value: unknown,
+): HearingSheetFacilityLocationEntry[] {
+  return toEntryArray(value, ["name", "floor", "note"]).map((entry) => ({
+    name: readString(entry.name),
+    floor: readString(entry.floor),
+    note: readString(entry.note),
+  }));
+}
+
+function parseAmenityEntries(value: unknown): HearingSheetAmenityEntry[] {
+  return toEntryArray(value, [
+    "name",
+    "inRoom",
+    "in_room",
+    "availableOnRequest",
+    "available_on_request",
+    "requestMethod",
+    "request_method",
+    "price",
+    "note",
+  ]).map((entry) => ({
+    name: readString(entry.name),
+    inRoom: readBoolean(entry.inRoom ?? entry.in_room),
+    availableOnRequest: readBoolean(
+      entry.availableOnRequest ?? entry.available_on_request,
+    ),
+    requestMethod: readString(entry.requestMethod ?? entry.request_method),
+    price: readString(entry.price),
+    note: readString(entry.note),
+  }));
+}
+
+function parseParkingEntries(value: unknown): HearingSheetParkingEntry[] {
+  return toEntryArray(value, [
+    "name",
+    "capacity",
+    "price",
+    "hours",
+    "reservationRequired",
+    "reservation_required",
+    "location",
+    "note",
+  ]).map((entry) => ({
+    name: readString(entry.name),
+    capacity: readString(entry.capacity),
+    price: readString(entry.price),
+    hours: readString(entry.hours),
+    reservationRequired: readBoolean(
+      entry.reservationRequired ?? entry.reservation_required,
+    ),
+    location: readString(entry.location),
+    note: readString(entry.note),
+  }));
+}
+
+function parseEmergencyEntries(value: unknown): HearingSheetEmergencyEntry[] {
+  return toEntryArray(value, ["category", "contact", "steps", "note"]).map((entry) => ({
+    category: readString(entry.category),
+    contact: readString(entry.contact),
+    steps: readString(entry.steps),
+    note: readString(entry.note),
+  }));
+}
+
+function parseFaqEntries(value: unknown): HearingSheetFaqEntry[] {
+  return toEntryArray(value, ["question", "answer"]).map((entry) => ({
+    question: readString(entry.question),
+    answer: readString(entry.answer),
+  }));
+}
+
+function parseCheckoutEntries(value: unknown): HearingSheetCheckoutEntry[] {
+  return toEntryArray(value, [
+    "time",
+    "method",
+    "keyReturnLocation",
+    "key_return_location",
+    "lateCheckoutPolicy",
+    "late_checkout_policy",
+    "note",
+  ]).map((entry) => ({
+    time: readString(entry.time),
+    method: readString(entry.method),
+    keyReturnLocation: readString(
+      entry.keyReturnLocation ?? entry.key_return_location,
+    ),
+    lateCheckoutPolicy: readString(
+      entry.lateCheckoutPolicy ?? entry.late_checkout_policy,
+    ),
+    note: readString(entry.note),
+  }));
+}
+
+function parseRoomServiceEntries(value: unknown): HearingSheetRoomServiceEntry[] {
+  return toEntryArray(value, [
+    "menuName",
+    "menu_name",
+    "price",
+    "orderMethod",
+    "order_method",
+    "hours",
+    "note",
+  ]).map((entry) => ({
+    menuName: readString(entry.menuName ?? entry.menu_name),
+    price: readString(entry.price),
+    orderMethod: readString(entry.orderMethod ?? entry.order_method),
+    hours: readString(entry.hours),
+    note: readString(entry.note),
+  }));
+}
+
+function parseTransportEntries(value: unknown): HearingSheetTransportEntry[] {
+  return toEntryArray(value, [
+    "companyName",
+    "company_name",
+    "serviceType",
+    "service_type",
+    "phone",
+    "hours",
+    "priceNote",
+    "price_note",
+    "note",
+  ]).map((entry) => ({
+    companyName: readString(entry.companyName ?? entry.company_name),
+    serviceType: readString(entry.serviceType ?? entry.service_type),
+    phone: readString(entry.phone),
+    hours: readString(entry.hours),
+    priceNote: readString(entry.priceNote ?? entry.price_note),
+    note: readString(entry.note),
+  }));
+}
+
+function parseNearbySpotEntries(value: unknown): HearingSheetNearbySpotEntry[] {
+  return toEntryArray(value, [
+    "name",
+    "category",
+    "distance",
+    "hours",
+    "location",
+    "note",
+  ]).map((entry) => ({
+    name: readString(entry.name),
+    category: readString(entry.category),
+    distance: readString(entry.distance),
+    hours: readString(entry.hours),
+    location: readString(entry.location),
+    note: readString(entry.note),
+  }));
+}
+
+function parseKnowledgeFromSource(
+  source: FirestoreHearingSheet | FirestoreRoom | null,
+): HearingSheetKnowledge {
   return {
-    wifi: knowledge.wifi.slice(0, 4),
-    breakfast: knowledge.breakfast.slice(0, 4),
-    amenities: knowledge.amenities.slice(0, 4),
-    facilities: knowledge.facilities.slice(0, 4),
+    frontDeskHours: parseFrontDeskHours(getSheetValue(source, "frontDeskHours")),
+    wifi: parseWifiNetworks(getSheetValue(source, "wifiNetworks")),
+    breakfast: parseBreakfastEntries(getSheetValue(source, "breakfastEntries")),
+    baths: parseBathEntries(getSheetValue(source, "bathEntries")),
+    facilities: parseFacilityEntries(getSheetValue(source, "facilityEntries")),
+    facilityLocations: parseFacilityLocationEntries(
+      getSheetValue(source, "facilityLocationEntries"),
+    ),
+    amenities: parseAmenityEntries(getSheetValue(source, "amenityEntries")),
+    parking: parseParkingEntries(getSheetValue(source, "parkingEntries")),
+    emergency: parseEmergencyEntries(getSheetValue(source, "emergencyEntries")),
+    faq: parseFaqEntries(getSheetValue(source, "faqEntries")),
+    checkout: parseCheckoutEntries(getSheetValue(source, "checkoutEntries")),
+    roomService: parseRoomServiceEntries(getSheetValue(source, "roomServiceEntries")),
+    transport: parseTransportEntries(getSheetValue(source, "transportEntries")),
+    nearbySpots: parseNearbySpotEntries(getSheetValue(source, "nearbySpotEntries")),
   };
+}
+
+function buildPromptCandidates(knowledge: HearingSheetKnowledge) {
+  const prompts = [
+    knowledge.wifi[0]?.ssid ? `Wi-Fi: ${knowledge.wifi[0].ssid}` : null,
+    knowledge.breakfast[0]?.hours
+      ? `朝食: ${knowledge.breakfast[0].hours}${
+          knowledge.breakfast[0].location ? ` ${knowledge.breakfast[0].location}` : ""
+        }`
+      : null,
+    knowledge.baths[0]?.location
+      ? `${knowledge.baths[0].name ?? "大浴場"}: ${knowledge.baths[0].location}`
+      : null,
+    knowledge.checkout[0]?.time ? `チェックアウト: ${knowledge.checkout[0].time}` : null,
+    knowledge.parking[0]?.location
+      ? `駐車場: ${knowledge.parking[0].location}`
+      : null,
+    knowledge.nearbySpots[0]?.name ? `周辺: ${knowledge.nearbySpots[0].name}` : null,
+  ];
+
+  return prompts.filter((entry): entry is string => entry !== null);
 }
 
 async function findRoomByRoomId(roomId: string) {
@@ -282,14 +547,17 @@ async function findHearingSheetByHotelId(hotelId: string | null) {
   }
 
   const db = getAdminDb();
-  const directSnapshot = await db.collection("hearing_sheets").doc(hotelId).get();
+  const directSnapshot = await db
+    .collection(GUEST_HEARING_SHEETS_COLLECTION)
+    .doc(hotelId)
+    .get();
 
   if (directSnapshot.exists) {
     return directSnapshot.data() as FirestoreHearingSheet;
   }
 
   const hearingSheetSnapshot = await db
-    .collection("hearing_sheets")
+    .collection(GUEST_HEARING_SHEETS_COLLECTION)
     .where("hotel_id", "==", hotelId)
     .limit(1)
     .get();
@@ -333,14 +601,16 @@ export async function getGuestRoomContextFromStore(
     stayActive: stayStatus.stayActive,
     hearingSheetPrompts: stayStatus.hearingSheetPrompts,
     hearingSheetKnowledge: stayStatus.hearingSheetKnowledge,
+    roomFloor: stayStatus.roomFloor,
   };
 }
 
 export async function getGuestStayStatusFromStore(
   roomId: string,
   selectedLanguage: GuestLanguage | null,
+  hotelIdHint?: string | null,
 ): Promise<GuestStayStatus | null> {
-  if (!hasFirebaseConfig()) {
+  if (!hasFirebaseAdminCredentials()) {
     return buildFallbackStayStatus(roomId, selectedLanguage);
   }
 
@@ -351,7 +621,7 @@ export async function getGuestStayStatusFromStore(
       return buildFallbackStayStatus(roomId, selectedLanguage);
     }
 
-    const hotelId = resolveGuestHotelId(toHotelId(roomRecord.data));
+    const hotelId = resolveGuestHotelId(hotelIdHint ?? toHotelId(roomRecord.data));
     const [hotelName, activeStay, hearingSheet] = await Promise.all([
       findHotelName(hotelId),
       findActiveStayByRoomId(roomId),
@@ -361,9 +631,13 @@ export async function getGuestStayStatusFromStore(
     const stayLanguage = isGuestLanguage(activeStay?.data.language)
       ? activeStay.data.language
       : null;
-    const prompts = getPromptCandidates(hearingSheet);
-    const knowledge = getKnowledgeCandidates(hearingSheet);
+    const hotelKnowledge = parseKnowledgeFromSource(hearingSheet);
+    const roomKnowledge = parseKnowledgeFromSource(roomRecord.data);
+    const knowledge = mergeKnowledge(roomKnowledge, hotelKnowledge);
     const fallbackRoom = getGuestRoomContext(roomId);
+    const fallbackKnowledge = fallbackRoom?.hearingSheetKnowledge ?? createEmptyKnowledge();
+    const mergedKnowledge = mergeKnowledge(knowledge, fallbackKnowledge);
+    const prompts = buildPromptCandidates(mergedKnowledge);
 
     return {
       roomId,
@@ -372,28 +646,9 @@ export async function getGuestStayStatusFromStore(
       stayActive: Boolean(activeStay),
       hotelId,
       stayId: activeStay?.id ?? null,
-      hearingSheetPrompts:
-        prompts.length > 0
-          ? prompts
-          : fallbackRoom?.hearingSheetPrompts ?? [],
-      hearingSheetKnowledge: {
-        wifi:
-          knowledge.wifi.length > 0
-            ? knowledge.wifi
-            : fallbackRoom?.hearingSheetKnowledge?.wifi ?? [],
-        breakfast:
-          knowledge.breakfast.length > 0
-            ? knowledge.breakfast
-            : fallbackRoom?.hearingSheetKnowledge?.breakfast ?? [],
-        amenities:
-          knowledge.amenities.length > 0
-            ? knowledge.amenities
-            : fallbackRoom?.hearingSheetKnowledge?.amenities ?? [],
-        facilities:
-          knowledge.facilities.length > 0
-            ? knowledge.facilities
-            : fallbackRoom?.hearingSheetKnowledge?.facilities ?? [],
-      },
+      hearingSheetPrompts: prompts.length > 0 ? prompts : fallbackRoom?.hearingSheetPrompts ?? [],
+      hearingSheetKnowledge: mergedKnowledge,
+      roomFloor: toRoomFloor(roomRecord.data) ?? fallbackRoom?.roomFloor ?? null,
       selectedLanguage: stayLanguage ?? selectedLanguage,
     };
   } catch {

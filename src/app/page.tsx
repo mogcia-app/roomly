@@ -18,7 +18,12 @@ export default async function Home({ searchParams }: HomePageProps) {
 
     try {
       access = await resolveGuestAccess(trimmedToken);
-    } catch {
+    } catch (error) {
+      console.error("[guest/page] failed to resolve access token on home", {
+        tokenPreview: trimmedToken.slice(0, 24),
+        hasRoomQrSigningSecret: Boolean(process.env.ROOM_QR_SIGNING_SECRET?.trim()),
+        error,
+      });
       notFound();
     }
 

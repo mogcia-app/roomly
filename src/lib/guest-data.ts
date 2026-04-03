@@ -611,13 +611,30 @@ export async function getGuestStayStatusFromStore(
   hotelIdHint?: string | null,
 ): Promise<GuestStayStatus | null> {
   if (!hasFirebaseAdminCredentials()) {
-    return buildFallbackStayStatus(roomId, selectedLanguage);
+    const fallback = buildFallbackStayStatus(roomId, selectedLanguage);
+
+    if (!fallback) {
+      console.error("[guest/data] missing firebase admin credentials for non-demo room", {
+        roomId,
+        hotelIdHint,
+        hasServiceAccountJson: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON),
+        hasAdminProjectId: Boolean(process.env.FIREBASE_ADMIN_PROJECT_ID),
+        hasAdminClientEmail: Boolean(process.env.FIREBASE_ADMIN_CLIENT_EMAIL),
+        hasAdminPrivateKey: Boolean(process.env.FIREBASE_ADMIN_PRIVATE_KEY),
+      });
+    }
+
+    return fallback;
   }
 
   try {
     const roomRecord = await findRoomByRoomId(roomId);
 
     if (!roomRecord) {
+      console.error("[guest/data] room not found in firestore", {
+        roomId,
+        hotelIdHint,
+      });
       return buildFallbackStayStatus(roomId, selectedLanguage);
     }
 
@@ -651,7 +668,12 @@ export async function getGuestStayStatusFromStore(
       roomFloor: toRoomFloor(roomRecord.data) ?? fallbackRoom?.roomFloor ?? null,
       selectedLanguage: stayLanguage ?? selectedLanguage,
     };
-  } catch {
+  } catch (error) {
+    console.error("[guest/data] failed to resolve stay status", {
+      roomId,
+      hotelIdHint,
+      error,
+    });
     return buildFallbackStayStatus(roomId, selectedLanguage);
   }
 }

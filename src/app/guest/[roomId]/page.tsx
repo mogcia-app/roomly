@@ -14,7 +14,12 @@ export default async function GuestEntryPage({ params }: GuestEntryPageProps) {
 
   try {
     access = await resolveGuestAccess(accessToken);
-  } catch {
+  } catch (error) {
+    console.error("[guest/page] failed to resolve guest entry access", {
+      tokenPreview: accessToken.slice(0, 24),
+      hasRoomQrSigningSecret: Boolean(process.env.ROOM_QR_SIGNING_SECRET?.trim()),
+      error,
+    });
     notFound();
   }
 
@@ -25,6 +30,11 @@ export default async function GuestEntryPage({ params }: GuestEntryPageProps) {
   const room = await getGuestRoomContextFromStore(access.roomId);
 
   if (!room) {
+    console.error("[guest/page] room context not found", {
+      roomId: access.roomId,
+      source: access.source,
+      hotelId: access.hotelId,
+    });
     notFound();
   }
 

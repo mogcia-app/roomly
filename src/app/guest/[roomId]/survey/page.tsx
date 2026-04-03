@@ -16,7 +16,12 @@ export default async function GuestSurveyPage({ params }: GuestSurveyPageProps) 
 
   try {
     access = await resolveGuestAccess(accessToken);
-  } catch {
+  } catch (error) {
+    console.error("[guest/page] failed to resolve survey access", {
+      tokenPreview: accessToken.slice(0, 24),
+      hasRoomQrSigningSecret: Boolean(process.env.ROOM_QR_SIGNING_SECRET?.trim()),
+      error,
+    });
     notFound();
   }
 
@@ -27,6 +32,11 @@ export default async function GuestSurveyPage({ params }: GuestSurveyPageProps) 
   const room = await getGuestRoomContextFromStore(access.roomId);
 
   if (!room) {
+    console.error("[guest/page] survey room context not found", {
+      roomId: access.roomId,
+      source: access.source,
+      hotelId: access.hotelId,
+    });
     notFound();
   }
 

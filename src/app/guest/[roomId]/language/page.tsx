@@ -22,7 +22,12 @@ export default async function GuestLanguagePage({
 
   try {
     access = await resolveGuestAccess(accessToken);
-  } catch {
+  } catch (error) {
+    console.error("[guest/page] failed to resolve language access", {
+      tokenPreview: accessToken.slice(0, 24),
+      hasRoomQrSigningSecret: Boolean(process.env.ROOM_QR_SIGNING_SECRET?.trim()),
+      error,
+    });
     notFound();
   }
 
@@ -38,6 +43,11 @@ export default async function GuestLanguagePage({
   );
 
   if (!room) {
+    console.error("[guest/page] language room stay status not found", {
+      roomId: access.roomId,
+      source: access.source,
+      hotelId: access.hotelId,
+    });
     notFound();
   }
 

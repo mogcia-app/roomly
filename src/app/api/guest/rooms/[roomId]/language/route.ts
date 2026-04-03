@@ -42,7 +42,7 @@ export async function POST(
     );
   }
 
-  const currentLanguage = await getStoredGuestLanguage(accessToken);
+  const currentLanguage = await getStoredGuestLanguage(access.accessToken);
   const stayStatus = await getGuestStayStatusFromStore(
     access.roomId,
     currentLanguage,
@@ -63,7 +63,7 @@ export async function POST(
     );
   }
 
-  await setStoredGuestLanguage(accessToken, body.language);
+  await setStoredGuestLanguage(access.accessToken, body.language);
 
   return Response.json({
     ok: true,

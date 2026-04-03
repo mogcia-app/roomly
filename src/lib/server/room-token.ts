@@ -32,6 +32,10 @@ export type ResolvedGuestAccess = {
   source: "token" | "development-room-id";
 };
 
+function normalizeAccessTokenValue(value: string) {
+  return value.replace(/\s+/g, "").trim();
+}
+
 function getRoomQrSigningSecret() {
   const value = process.env.ROOM_QR_SIGNING_SECRET?.trim();
 
@@ -127,11 +131,12 @@ export function verifySignedRoomToken(token: string) {
 }
 
 export async function resolveSignedRoomToken(token: string) {
+  const verified = verifySignedRoomToken(token);
+
   if (!hasFirebaseAdminCredentials()) {
-    return null;
+    return verified;
   }
 
-  const verified = verifySignedRoomToken(token);
   const snapshot = await getAdminDb().collection("rooms").doc(verified.roomId).get();
 
   if (!snapshot.exists) {
@@ -164,7 +169,7 @@ function canUseDevelopmentRoomId(accessToken: string) {
 }
 
 export async function resolveGuestAccess(accessToken: string): Promise<ResolvedGuestAccess> {
-  const trimmedAccessToken = accessToken.trim();
+  const trimmedAccessToken = normalizeAccessTokenValue(accessToken);
 
   if (!trimmedAccessToken) {
     throw new Error("Guest access token is empty.");

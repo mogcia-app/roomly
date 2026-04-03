@@ -11,16 +11,18 @@ type HomePageProps = {
 
 export default async function Home({ searchParams }: HomePageProps) {
   const { token } = await searchParams;
-  const trimmedToken = token?.trim();
+  const trimmedToken = token?.replace(/\s+/g, "").trim();
 
   if (trimmedToken) {
+    let access;
+
     try {
-      await resolveGuestAccess(trimmedToken);
+      access = await resolveGuestAccess(trimmedToken);
     } catch {
       notFound();
     }
 
-    redirect(`/guest/${encodeURIComponent(trimmedToken)}`);
+    redirect(`/guest/${encodeURIComponent(access.accessToken)}`);
   }
 
   return (

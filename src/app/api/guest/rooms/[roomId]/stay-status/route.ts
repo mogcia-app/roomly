@@ -28,7 +28,7 @@ export async function GET(
     );
   }
 
-  const selectedLanguage = await getStoredGuestLanguage(accessToken);
+  const selectedLanguage = await getStoredGuestLanguage(access.accessToken);
   const stayStatus = await getGuestStayStatusFromStore(
     access.roomId,
     selectedLanguage,

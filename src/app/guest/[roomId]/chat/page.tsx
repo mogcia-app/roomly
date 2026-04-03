@@ -39,7 +39,7 @@ export default async function GuestChatPage({
   }
 
   const cookieStore = await cookies();
-  const storedLanguage = cookieStore.get(getGuestLanguageCookieName(accessToken))?.value;
+  const storedLanguage = cookieStore.get(getGuestLanguageCookieName(access.accessToken))?.value;
   const currentLanguage = isGuestLanguage(lang)
     ? lang
     : isGuestLanguage(storedLanguage)
@@ -47,7 +47,7 @@ export default async function GuestChatPage({
       : null;
 
   if (!currentLanguage) {
-    redirect(`/guest/${accessToken}/language`);
+    redirect(`/guest/${access.accessToken}/language`);
   }
 
   const room = await getGuestStayStatusFromStore(
@@ -61,7 +61,7 @@ export default async function GuestChatPage({
   }
 
   if (!room.stayActive) {
-    redirect(`/guest/${accessToken}/survey`);
+    redirect(`/guest/${access.accessToken}/survey`);
   }
 
   const currentMode = mode === "human" ? "human" : "ai";
@@ -108,7 +108,7 @@ export default async function GuestChatPage({
 
         <GuestChatExperience
           key={`${currentMode}:${thread.at(-1)?.id ?? "empty"}:${thread.length}`}
-          roomId={accessToken}
+          roomId={access.accessToken}
           roomLabel={room.roomLabel}
           richMenu={richMenu}
           language={currentLanguage}

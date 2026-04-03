@@ -35,7 +35,7 @@ export async function POST(
       return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
     }
 
-    const storedLanguage = await getStoredGuestLanguage(accessToken);
+    const storedLanguage = await getStoredGuestLanguage(access.accessToken);
     const stayStatus = await getGuestStayStatusFromStore(
       access.roomId,
       storedLanguage,

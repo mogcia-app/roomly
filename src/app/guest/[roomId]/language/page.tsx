@@ -30,7 +30,7 @@ export default async function GuestLanguagePage({
     notFound();
   }
 
-  const storedLanguage = await getStoredGuestLanguage(accessToken);
+  const storedLanguage = await getStoredGuestLanguage(access.accessToken);
   const room = await getGuestStayStatusFromStore(
     access.roomId,
     storedLanguage,
@@ -45,7 +45,7 @@ export default async function GuestLanguagePage({
     <GuestShell accent>
       <main className="flex flex-1 flex-col px-5 py-6">
         <GuestLanguageForm
-          roomId={accessToken}
+          roomId={access.accessToken}
           roomLabel={room.roomLabel}
           hotelName={room.hotelName}
           showHotelName={process.env.NODE_ENV === "production"}

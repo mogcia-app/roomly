@@ -12,6 +12,7 @@ type HomePageProps = {
 export default async function Home({ searchParams }: HomePageProps) {
   const { token } = await searchParams;
   const trimmedToken = token?.replace(/\s+/g, "").trim();
+  let startHref = "/guest/203/language";
 
   if (trimmedToken) {
     let access;
@@ -27,7 +28,7 @@ export default async function Home({ searchParams }: HomePageProps) {
       notFound();
     }
 
-    redirect(`/guest/${encodeURIComponent(access.accessToken)}`);
+    startHref = `/guest/${encodeURIComponent(access.accessToken)}`;
   }
 
   return (
@@ -63,7 +64,7 @@ export default async function Home({ searchParams }: HomePageProps) {
 
             <div className="space-y-4 pt-10">
               <Link
-                href="/guest/203/language"
+                href={startHref}
                 className="flex h-14 items-center justify-center rounded-none bg-[linear-gradient(180deg,#c32a1f_0%,#ad2218_100%)] text-[15px] font-light tracking-[0.16em] text-white transition hover:brightness-[0.98]"
               >
                 START

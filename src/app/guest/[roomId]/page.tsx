@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getGuestRoomContextFromStore } from "@/lib/guest-data";
+import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 type GuestEntryPageProps = {
@@ -27,15 +27,15 @@ export default async function GuestEntryPage({ params }: GuestEntryPageProps) {
     notFound();
   }
 
-  const room = await getGuestRoomContextFromStore(access.roomId);
+  const stayStatus = await getGuestActiveStayStatusFromStore(access.roomId, null, access.hotelId);
 
-  if (!room) {
-    console.error("[guest/page] room context not found", {
+  if (!stayStatus) {
+    console.warn("[guest/page] no active stay for guest entry", {
       roomId: access.roomId,
       source: access.source,
       hotelId: access.hotelId,
     });
-    notFound();
+    redirect(`/guest/${access.accessToken}/unavailable`);
   }
 
   redirect(`/guest/${access.accessToken}/language`);

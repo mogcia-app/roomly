@@ -1,5 +1,5 @@
 import { requestHumanHandoff } from "@/lib/guest-chat-data";
-import { getGuestStayStatusFromStore } from "@/lib/guest-data";
+import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -29,14 +29,14 @@ export async function POST(
     }
 
     const storedLanguage = await getStoredGuestLanguage(access.accessToken);
-    const stayStatus = await getGuestStayStatusFromStore(
+    const stayStatus = await getGuestActiveStayStatusFromStore(
       access.roomId,
       storedLanguage,
       access.hotelId,
     );
 
     if (!stayStatus) {
-      return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
+      return Response.json({ error: "ACTIVE_STAY_NOT_FOUND" }, { status: 409 });
     }
 
     const result = await requestHumanHandoff(stayStatus, payload.category);

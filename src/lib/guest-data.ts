@@ -677,3 +677,27 @@ export async function getGuestStayStatusFromStore(
     return buildFallbackStayStatus(roomId, selectedLanguage);
   }
 }
+
+export async function getGuestActiveStayStatusFromStore(
+  roomId: string,
+  selectedLanguage: GuestLanguage | null,
+  hotelIdHint?: string | null,
+): Promise<GuestStayStatus | null> {
+  const stayStatus = await getGuestStayStatusFromStore(roomId, selectedLanguage, hotelIdHint);
+
+  if (!stayStatus) {
+    return null;
+  }
+
+  if (!stayStatus.stayActive || !stayStatus.stayId) {
+    console.warn("[guest/data] active stay not found", {
+      roomId,
+      hotelIdHint,
+      stayActive: stayStatus.stayActive,
+      stayId: stayStatus.stayId ?? null,
+    });
+    return null;
+  }
+
+  return stayStatus;
+}

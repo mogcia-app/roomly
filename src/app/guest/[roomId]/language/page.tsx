@@ -1,9 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { GuestLanguageForm } from "@/components/guest/GuestLanguageForm";
 import { GuestShell } from "@/components/guest/GuestShell";
 import { type GuestLanguage } from "@/lib/guest-demo";
-import { getGuestStayStatusFromStore } from "@/lib/guest-data";
+import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -36,19 +36,19 @@ export default async function GuestLanguagePage({
   }
 
   const storedLanguage = await getStoredGuestLanguage(access.accessToken);
-  const room = await getGuestStayStatusFromStore(
+  const room = await getGuestActiveStayStatusFromStore(
     access.roomId,
     storedLanguage,
     access.hotelId,
   );
 
   if (!room) {
-    console.error("[guest/page] language room stay status not found", {
+    console.warn("[guest/page] no active stay for language page", {
       roomId: access.roomId,
       source: access.source,
       hotelId: access.hotelId,
     });
-    notFound();
+    redirect(`/guest/${access.accessToken}/unavailable`);
   }
 
   return (

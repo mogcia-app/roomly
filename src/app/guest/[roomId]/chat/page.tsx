@@ -6,7 +6,7 @@ import {
   isGuestLanguage,
 } from "@/lib/guest-demo";
 import { getGuestMessagesFromStore } from "@/lib/guest-chat-data";
-import { getGuestStayStatusFromStore } from "@/lib/guest-data";
+import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getGuestLanguageCookieName } from "@/lib/guest-language-cookie";
 import { getGuestRichMenuByHotelId } from "@/lib/guest-rich-menu";
 import { resolveGuestAccess } from "@/lib/server/room-token";
@@ -55,20 +55,20 @@ export default async function GuestChatPage({
     redirect(`/guest/${access.accessToken}/language`);
   }
 
-  const room = await getGuestStayStatusFromStore(
+  const room = await getGuestActiveStayStatusFromStore(
     access.roomId,
     currentLanguage,
     access.hotelId,
   );
 
   if (!room) {
-    console.error("[guest/page] chat stay status not found", {
+    console.warn("[guest/page] no active stay for chat page", {
       roomId: access.roomId,
       source: access.source,
       hotelId: access.hotelId,
       language: currentLanguage,
     });
-    notFound();
+    redirect(`/guest/${access.accessToken}/unavailable`);
   }
 
   const currentMode = mode === "human" ? "human" : "ai";

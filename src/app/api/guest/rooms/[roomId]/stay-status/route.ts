@@ -1,5 +1,5 @@
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
-import { getGuestStayStatusFromStore } from "@/lib/guest-data";
+import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
@@ -29,7 +29,7 @@ export async function GET(
   }
 
   const selectedLanguage = await getStoredGuestLanguage(access.accessToken);
-  const stayStatus = await getGuestStayStatusFromStore(
+  const stayStatus = await getGuestActiveStayStatusFromStore(
     access.roomId,
     selectedLanguage,
     access.hotelId,
@@ -37,8 +37,8 @@ export async function GET(
 
   if (!stayStatus) {
     return Response.json(
-      { error: "ROOM_NOT_FOUND" },
-      { status: 404 },
+      { error: "ACTIVE_STAY_NOT_FOUND" },
+      { status: 409 },
     );
   }
 

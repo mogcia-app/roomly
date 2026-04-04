@@ -18,6 +18,16 @@ import {
 } from "@/lib/guest-rich-menu";
 
 type GuestChatExperienceProps = {
+  debugInfo?: {
+    accessSource: "token" | "development-room-id";
+    accessHotelId: string | null;
+    resolvedHotelId: string | null;
+    roomId: string;
+    roomLabel: string;
+    stayId: string | null;
+    selectedLanguage: GuestLanguage | null;
+    knowledgeCounts: Record<string, number>;
+  } | null;
   roomId: string;
   roomLabel: string;
   richMenu: GuestRichMenu | null;
@@ -696,6 +706,7 @@ function HumanHandoffCta({
 }
 
 export function GuestChatExperience({
+  debugInfo,
   roomId,
   roomLabel,
   richMenu,
@@ -741,6 +752,22 @@ export function GuestChatExperience({
   return (
     <>
       <section className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
+        {debugInfo ? (
+          <div className="mb-4 rounded-[18px] border border-[#d9cdc7] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#6a544b]">
+            <div className="font-medium text-[#8b4c43]">Debug</div>
+            <div>access source: {debugInfo.accessSource}</div>
+            <div>token hotelId: {debugInfo.accessHotelId ?? "(null)"}</div>
+            <div>resolved hotelId: {debugInfo.resolvedHotelId ?? "(null)"}</div>
+            <div>room: {debugInfo.roomId} / {debugInfo.roomLabel}</div>
+            <div>stayId: {debugInfo.stayId ?? "(null)"}</div>
+            <div>language: {debugInfo.selectedLanguage ?? "(null)"}</div>
+            <div className="mt-1 break-words">
+              knowledge: {Object.entries(debugInfo.knowledgeCounts).map(([key, value]) => (
+                `${key}=${value}`
+              )).join(", ")}
+            </div>
+          </div>
+        ) : null}
         {!hasGuestMessage && mode === "ai" ? (
           <StarterActions
             roomId={roomId}

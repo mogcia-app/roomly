@@ -14,17 +14,39 @@ import { resolveGuestAccess } from "@/lib/server/room-token";
 type GuestChatPageProps = {
   params: Promise<{ roomId: string }>;
   searchParams: Promise<{
+    debug?: string;
     lang?: string;
     mode?: string;
   }>;
 };
+
+function summarizeKnowledgeCounts(
+  knowledge: NonNullable<Awaited<ReturnType<typeof getGuestActiveStayStatusFromStore>>>["hearingSheetKnowledge"],
+) {
+  return {
+    frontDeskHours: knowledge?.frontDeskHours.length ?? 0,
+    wifi: knowledge?.wifi.length ?? 0,
+    breakfast: knowledge?.breakfast.length ?? 0,
+    baths: knowledge?.baths.length ?? 0,
+    facilities: knowledge?.facilities.length ?? 0,
+    facilityLocations: knowledge?.facilityLocations.length ?? 0,
+    amenities: knowledge?.amenities.length ?? 0,
+    parking: knowledge?.parking.length ?? 0,
+    emergency: knowledge?.emergency.length ?? 0,
+    faq: knowledge?.faq.length ?? 0,
+    checkout: knowledge?.checkout.length ?? 0,
+    roomService: knowledge?.roomService.length ?? 0,
+    transport: knowledge?.transport.length ?? 0,
+    nearbySpots: knowledge?.nearbySpots.length ?? 0,
+  };
+}
 
 export default async function GuestChatPage({
   params,
   searchParams,
 }: GuestChatPageProps) {
   const { roomId: accessToken } = await params;
-  const { lang, mode } = await searchParams;
+  const { debug, lang, mode } = await searchParams;
 
   let access;
 
@@ -72,6 +94,18 @@ export default async function GuestChatPage({
   }
 
   const currentMode = mode === "human" ? "human" : "ai";
+  const debugInfo = debug === "1"
+    ? {
+        accessSource: access.source,
+        accessHotelId: access.hotelId,
+        resolvedHotelId: room.hotelId ?? null,
+        roomId: room.roomId,
+        roomLabel: room.roomLabel,
+        stayId: room.stayId ?? null,
+        selectedLanguage: room.selectedLanguage ?? null,
+        knowledgeCounts: summarizeKnowledgeCounts(room.hearingSheetKnowledge),
+      }
+    : null;
   const [thread, richMenu] = await Promise.all([
     getGuestMessagesFromStore(room, currentMode),
     getGuestRichMenuByHotelId(room.hotelId),
@@ -122,6 +156,7 @@ export default async function GuestChatPage({
           mode={currentMode}
           prompts={room.hearingSheetPrompts}
           initialMessages={thread}
+          debugInfo={debugInfo}
         />
       </main>
     </div>

@@ -534,6 +534,27 @@ function normalizeText(value: string) {
   return value.toLowerCase().replace(/[\s　。、，,!?？!:\-_/\\()[\]{}"'`]+/g, "");
 }
 
+function buildCharacterNgrams(value: string, size = 2) {
+  const normalized = normalizeText(value);
+
+  if (normalized.length < size) {
+    return normalized ? [normalized] : [];
+  }
+
+  const ngrams: string[] = [];
+
+  for (let index = 0; index <= normalized.length - size; index += 1) {
+    ngrams.push(normalized.slice(index, index + size));
+  }
+
+  return ngrams;
+}
+
+function extractSearchTokens(value: string) {
+  const tokens = value.match(/[A-Za-z0-9]{2,}|[\u3040-\u30ff\u3400-\u9fff]{2,}/g) ?? [];
+  return [...new Set(tokens.map((token) => normalizeText(token)).filter(Boolean))];
+}
+
 function compactParts(values: Array<string | null | undefined>) {
   return values.filter((value): value is string => Boolean(value && value.trim()));
 }
@@ -585,6 +606,43 @@ function scoreFaq(question: string, candidate: string) {
   for (const token of candidate.match(/[A-Za-z]{3,}|[\u3040-\u30ff\u3400-\u9fff]{2,}/g) ?? []) {
     if (normalizedQuestion.includes(normalizeText(token))) {
       score += token.length;
+    }
+  }
+
+  return score;
+}
+
+function scoreKnowledgeMatch(question: string, candidate: string) {
+  const normalizedQuestion = normalizeText(question);
+  const normalizedCandidate = normalizeText(candidate);
+
+  if (!normalizedQuestion || !normalizedCandidate) {
+    return 0;
+  }
+
+  if (
+    normalizedQuestion.includes(normalizedCandidate) ||
+    normalizedCandidate.includes(normalizedQuestion)
+  ) {
+    return Math.min(normalizedQuestion.length, normalizedCandidate.length) + 12;
+  }
+
+  let score = 0;
+  const questionTokens = extractSearchTokens(question);
+  const candidateTokens = new Set(extractSearchTokens(candidate));
+
+  for (const token of questionTokens) {
+    if (candidateTokens.has(token)) {
+      score += Math.max(2, token.length);
+    }
+  }
+
+  const questionNgrams = buildCharacterNgrams(question);
+  const candidateNgrams = new Set(buildCharacterNgrams(candidate));
+
+  for (const ngram of questionNgrams) {
+    if (candidateNgrams.has(ngram)) {
+      score += 1;
     }
   }
 
@@ -742,6 +800,170 @@ function findBestFaq(stayStatus: GuestStayStatus, body: string) {
   }
 
   return bestScore >= 4 ? bestEntry : null;
+}
+
+function findBestKnowledgeReply(stayStatus: GuestStayStatus, body: string) {
+  const knowledge = stayStatus.hearingSheetKnowledge;
+
+  if (!knowledge) {
+    return null;
+  }
+
+  const candidates = [
+    ...knowledge.wifi.map((entry) => ({
+      reply: formatWifiEntry(entry),
+      searchText: compactParts([
+        "wifi wi-fi wireless 無線lan internet password ssid パスワード ネット",
+        entry.floor,
+        entry.ssid,
+        entry.password,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.breakfast.map((entry) => ({
+      reply: formatBreakfastEntry(entry),
+      searchText: compactParts([
+        "breakfast 朝食 レストラン ビュッフェ buffet",
+        entry.style,
+        entry.hours,
+        entry.location,
+        entry.price,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.baths.map((entry) => ({
+      reply: formatBathEntry(entry),
+      searchText: compactParts([
+        "bath spa onsen お風呂 温泉 大浴場",
+        entry.name,
+        entry.hours,
+        entry.location,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.facilities.map((entry) => ({
+      reply: formatFacilityEntry(entry),
+      searchText: compactParts([
+        "facility facilities 館内 設備 施設",
+        entry.name,
+        entry.hours,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.facilityLocations.map((entry) => ({
+      reply: formatFacilityLocationEntry(entry),
+      searchText: compactParts([
+        "location floor 場所 どこ 何階",
+        entry.name,
+        entry.floor,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.amenities.map((entry) => ({
+      reply: formatAmenityEntry(entry),
+      searchText: compactParts([
+        "amenity amenities towel toothbrush brush タオル 歯ブラシ アメニティ",
+        entry.name,
+        entry.requestMethod,
+        entry.price,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.parking.map((entry) => ({
+      reply: formatParkingEntry(entry),
+      searchText: compactParts([
+        "parking car park 駐車場 車",
+        entry.name,
+        entry.location,
+        entry.capacity,
+        entry.price,
+        entry.hours,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.emergency.map((entry) => ({
+      reply: formatEmergencyEntry(entry),
+      searchText: compactParts([
+        "emergency fire ambulance hospital 医療 火事 救急 病院 緊急",
+        entry.category,
+        entry.contact,
+        entry.steps,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.checkout.map((entry) => ({
+      reply: formatCheckoutEntry(entry),
+      searchText: compactParts([
+        "checkout check-out late checkout key return チェックアウト 鍵 返却",
+        entry.time,
+        entry.method,
+        entry.keyReturnLocation,
+        entry.lateCheckoutPolicy,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.roomService.map((entry) => ({
+      reply: formatRoomServiceEntry(entry),
+      searchText: compactParts([
+        "room service food meal ルームサービス 食事",
+        entry.menuName,
+        entry.orderMethod,
+        entry.hours,
+        entry.price,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.transport.map((entry) => ({
+      reply: formatTransportEntry(entry),
+      searchText: compactParts([
+        "transport taxi pickup bus train タクシー 送迎 交通",
+        entry.companyName,
+        entry.serviceType,
+        entry.phone,
+        entry.hours,
+        entry.priceNote,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.nearbySpots.map((entry) => ({
+      reply: formatNearbySpotEntry(entry),
+      searchText: compactParts([
+        "nearby around store convenience station 周辺 近く コンビニ 駅",
+        entry.name,
+        entry.category,
+        entry.distance,
+        entry.hours,
+        entry.location,
+        entry.note,
+      ]).join(" "),
+    })),
+    ...knowledge.frontDeskHours.map((entry) => ({
+      reply: entry,
+      searchText: `front desk フロント 営業時間 対応時間 ${entry}`,
+    })),
+    ...knowledge.faq.flatMap((entry) => (
+      entry.answer
+        ? [{
+            reply: entry.answer,
+            searchText: compactParts([entry.question, entry.answer]).join(" "),
+          }]
+        : []
+    )),
+  ].filter((candidate) => candidate.reply.trim().length > 0);
+
+  let bestCandidate: (typeof candidates)[number] | null = null;
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const score = scoreKnowledgeMatch(body, candidate.searchText);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestCandidate = candidate;
+    }
+  }
+
+  return bestScore >= 3 ? bestCandidate?.reply ?? null : null;
 }
 
 function buildAiReply(stayStatus: GuestStayStatus, body: string) {
@@ -923,6 +1145,11 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
 
   if (normalizedBody.includes("フロント") && (knowledge?.frontDeskHours?.length ?? 0) > 0) {
     return takeFormatted(knowledge?.frontDeskHours ?? []) || frontDeskFallback;
+  }
+
+  const bestKnowledgeReply = findBestKnowledgeReply(stayStatus, body);
+  if (bestKnowledgeReply) {
+    return bestKnowledgeReply;
   }
 
   return frontDeskFallback;

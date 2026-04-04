@@ -609,6 +609,33 @@ function extractFloorFromQuestion(body: string) {
   return englishMatch?.[1] ? `${englishMatch[1]}階` : null;
 }
 
+function extractFloorNumber(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const match =
+    normalized.match(/([0-9]+)\s*階/) ??
+    normalized.match(/([0-9]+)\s*f\b/) ??
+    normalized.match(/\bf\s*([0-9]+)\b/) ??
+    normalized.match(/\bfloor\s*([0-9]+)\b/) ??
+    normalized.match(/^([0-9]+)$/);
+
+  return match?.[1] ?? null;
+}
+
+function isSameFloor(left: string | null | undefined, right: string | null | undefined) {
+  const leftFloor = extractFloorNumber(left);
+  const rightFloor = extractFloorNumber(right);
+
+  if (!leftFloor || !rightFloor) {
+    return false;
+  }
+
+  return leftFloor === rightFloor;
+}
+
 function scoreFaq(question: string, candidate: string) {
   const normalizedQuestion = normalizeText(question);
   const normalizedCandidate = normalizeText(candidate);
@@ -1034,7 +1061,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const requestedFloor = extractFloorFromQuestion(body) ?? stayStatus.roomFloor ?? null;
     const wifiEntries = knowledge?.wifi ?? [];
     const floorMatched = requestedFloor
-      ? wifiEntries.filter((entry) => entry.floor === requestedFloor)
+      ? wifiEntries.filter((entry) => isSameFloor(entry.floor, requestedFloor))
       : [];
     const wifiReply = takeFormatted((floorMatched.length > 0 ? floorMatched : wifiEntries).map(
       (entry) => formatWifiEntry(entry),

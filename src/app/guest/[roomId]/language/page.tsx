@@ -9,14 +9,17 @@ import { resolveGuestAccess } from "@/lib/server/room-token";
 
 type GuestLanguagePageProps = {
   params: Promise<{ roomId: string }>;
+  searchParams: Promise<{ debug?: string }>;
 };
 
 const languages: GuestLanguage[] = ["ja", "en", "zh-CN", "ko"];
 
 export default async function GuestLanguagePage({
   params,
+  searchParams,
 }: GuestLanguagePageProps) {
   const { roomId: accessToken } = await params;
+  const { debug } = await searchParams;
 
   let access;
 
@@ -48,13 +51,14 @@ export default async function GuestLanguagePage({
       source: access.source,
       hotelId: access.hotelId,
     });
-    redirect(`/guest/${access.accessToken}/unavailable`);
+    redirect(`/guest/${access.accessToken}/unavailable${debug === "1" ? "?debug=1" : ""}`);
   }
 
   return (
     <GuestShell accent>
       <main className="flex flex-1 flex-col px-5 py-6">
         <GuestLanguageForm
+          debug={debug === "1"}
           roomId={access.accessToken}
           roomLabel={room.roomLabel}
           hotelName={room.hotelName}

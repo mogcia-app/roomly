@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getGuestLanguageLabel, type GuestLanguage } from "@/lib/guest-demo";
 
 type GuestLanguageFormProps = {
+  debug?: boolean;
   roomId: string;
   roomLabel: string;
   hotelName: string;
@@ -15,6 +16,7 @@ type GuestLanguageFormProps = {
 };
 
 export function GuestLanguageForm({
+  debug = false,
   roomId,
   roomLabel,
   hotelName,
@@ -51,7 +53,7 @@ export function GuestLanguageForm({
     }
 
     startTransition(() => {
-      router.push(`/guest/${roomId}/chat`);
+      router.push(`/guest/${roomId}/chat${debug ? "?debug=1" : ""}`);
       router.refresh();
     });
   }

@@ -74,7 +74,7 @@ export default async function GuestChatPage({
       : null;
 
   if (!currentLanguage) {
-    redirect(`/guest/${access.accessToken}/language`);
+    redirect(`/guest/${access.accessToken}/language${debug === "1" ? "?debug=1" : ""}`);
   }
 
   const room = await getGuestActiveStayStatusFromStore(
@@ -90,7 +90,7 @@ export default async function GuestChatPage({
       hotelId: access.hotelId,
       language: currentLanguage,
     });
-    redirect(`/guest/${access.accessToken}/unavailable`);
+    redirect(`/guest/${access.accessToken}/unavailable${debug === "1" ? "?debug=1" : ""}`);
   }
 
   const currentMode = mode === "human" ? "human" : "ai";

@@ -28,6 +28,11 @@ import {
   type GuestStayStatus,
 } from "@/lib/guest-demo";
 import { resolveGuestHotelId } from "@/lib/guest-hotel-id";
+import {
+  formatRoomLabel,
+  resolveRoomDisplayName,
+  resolveRoomNumber,
+} from "@/lib/room-display";
 
 type FirestoreRoom = {
   hotel_id?: string;
@@ -58,8 +63,13 @@ type FirestoreHearingSheet = {
 };
 
 function toRoomLabel(roomId: string, roomData?: FirestoreRoom) {
-  const roomNumber = roomData?.room_number ?? roomData?.roomNumber ?? roomId;
-  return `${roomNumber}号室`;
+  const roomNumber = resolveRoomNumber(roomData);
+  const displayName = resolveRoomDisplayName(roomData);
+  return formatRoomLabel({
+    displayName,
+    roomNumber,
+    roomId,
+  });
 }
 
 function toHotelId(roomData?: FirestoreRoom) {
@@ -701,6 +711,8 @@ export async function getGuestRoomContextFromStore(
   return {
     roomId: stayStatus.roomId,
     roomLabel: stayStatus.roomLabel,
+    roomDisplayName: stayStatus.roomDisplayName,
+    roomNumber: stayStatus.roomNumber,
     hotelName: stayStatus.hotelName,
     stayActive: stayStatus.stayActive,
     hearingSheetPrompts: stayStatus.hearingSheetPrompts,
@@ -759,6 +771,8 @@ export async function getGuestStayStatusFromStore(
     const fallbackKnowledge = fallbackRoom?.hearingSheetKnowledge ?? createEmptyKnowledge();
     const mergedKnowledge = mergeKnowledge(knowledge, fallbackKnowledge);
     const prompts = buildPromptCandidates(mergedKnowledge);
+    const roomNumber = resolveRoomNumber(roomRecord.data);
+    const roomDisplayName = resolveRoomDisplayName(roomRecord.data);
 
     console.info("[guest/data] resolved stay status", {
       roomId,
@@ -780,6 +794,8 @@ export async function getGuestStayStatusFromStore(
     return {
       roomId,
       roomLabel: toRoomLabel(roomId, roomRecord.data),
+      roomDisplayName,
+      roomNumber,
       hotelName,
       stayActive: Boolean(activeStay),
       hotelId,

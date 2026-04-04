@@ -19,6 +19,8 @@ export type GuestMessage = {
 export type GuestRoomContext = {
   roomId: string;
   roomLabel: string;
+  roomDisplayName?: string | null;
+  roomNumber?: string | null;
   hotelName: string;
   stayActive: boolean;
   hearingSheetPrompts: string[];

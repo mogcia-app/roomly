@@ -17,6 +17,10 @@ import {
   type GuestMessage,
   type GuestStayStatus,
 } from "@/lib/guest-demo";
+import {
+  resolveRoomDisplayName,
+  resolveRoomNumber,
+} from "@/lib/room-display";
 
 type ThreadMode = "ai" | "human";
 
@@ -25,6 +29,10 @@ type FirestoreChatThread = {
   stayId?: string;
   room_id?: string;
   roomId?: string;
+  room_display_name?: string | null;
+  roomDisplayName?: string | null;
+  room_number?: string | null;
+  roomNumber?: string | null;
   hotel_id?: string | null;
   mode?: ThreadMode;
   status?: "new" | "in_progress" | "resolved";
@@ -390,9 +398,20 @@ async function createThread(
   stayStatus: GuestStayStatus,
   mode: ThreadMode,
 ) {
+  const roomDisplayName = resolveRoomDisplayName({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+    display_name: stayStatus.roomDisplayName ?? stayStatus.roomLabel,
+  });
+  const roomNumber = resolveRoomNumber({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+  });
   const threadRef = await getAdminDb().collection("chat_threads").add({
     stay_id: stayStatus.stayId ?? stayStatus.roomId,
     room_id: stayStatus.roomId,
+    room_display_name: roomDisplayName,
+    room_number: roomNumber,
     hotel_id: stayStatus.hotelId ?? null,
     mode,
     status: mode === "human" ? "new" : "resolved",
@@ -426,10 +445,21 @@ async function updateHumanThreadMetadata(
   lastMessageSender: "guest" | "ai" | "front" | "system",
   category?: string,
 ) {
+  const roomDisplayName = resolveRoomDisplayName({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+    display_name: stayStatus.roomDisplayName ?? stayStatus.roomLabel,
+  });
+  const roomNumber = resolveRoomNumber({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+  });
   await getAdminDb().collection("chat_threads").doc(threadId).set(
     {
       stay_id: stayStatus.stayId ?? stayStatus.roomId,
       room_id: stayStatus.roomId,
+      room_display_name: roomDisplayName,
+      room_number: roomNumber,
       hotel_id: stayStatus.hotelId ?? null,
       mode: "human" satisfies ThreadMode,
       status: "new" as const,

@@ -88,6 +88,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function summarizeTopLevelKeys(value: unknown) {
+  const record = asRecord(value);
+
+  if (!record) {
+    return [];
+  }
+
+  return Object.keys(record).sort();
+}
+
 function readString(value: unknown): string | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -685,6 +695,8 @@ export async function getGuestStayStatusFromStore(
       stayLanguage,
       roomRecordFound: true,
       hearingSheetFound: Boolean(hearingSheet),
+      roomRecordKeys: summarizeTopLevelKeys(roomRecord.data),
+      hearingSheetKeys: summarizeTopLevelKeys(hearingSheet),
       roomKnowledgeCounts: summarizeKnowledgeCounts(roomKnowledge),
       hotelKnowledgeCounts: summarizeKnowledgeCounts(hotelKnowledge),
       mergedKnowledgeCounts: summarizeKnowledgeCounts(mergedKnowledge),

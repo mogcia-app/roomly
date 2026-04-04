@@ -152,14 +152,28 @@ function toEntryArray(value: unknown, expectedKeys: string[]): Array<Record<stri
 
 function getSheetValue(
   source: FirestoreHearingSheet | FirestoreRoom | null | undefined,
-  fieldName: string,
+  fieldNames: string | string[],
 ) {
   if (!source) {
     return null;
   }
 
+  const names = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
   const categories = asRecord(source.categories);
-  return source[fieldName] ?? categories?.[fieldName] ?? null;
+  const operations = asRecord((source as FirestoreHearingSheet).operations);
+
+  for (const fieldName of names) {
+    const value =
+      source[fieldName] ??
+      categories?.[fieldName] ??
+      operations?.[fieldName];
+
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 function createEmptyKnowledge(): HearingSheetKnowledge {
@@ -461,22 +475,83 @@ function parseKnowledgeFromSource(
   source: FirestoreHearingSheet | FirestoreRoom | null,
 ): HearingSheetKnowledge {
   return {
-    frontDeskHours: parseFrontDeskHours(getSheetValue(source, "frontDeskHours")),
-    wifi: parseWifiNetworks(getSheetValue(source, "wifiNetworks")),
-    breakfast: parseBreakfastEntries(getSheetValue(source, "breakfastEntries")),
-    baths: parseBathEntries(getSheetValue(source, "bathEntries")),
-    facilities: parseFacilityEntries(getSheetValue(source, "facilityEntries")),
+    frontDeskHours: parseFrontDeskHours(getSheetValue(source, [
+      "frontDeskHours",
+      "front_desk_hours",
+      "frontDesk",
+      "front_desk",
+    ])),
+    wifi: parseWifiNetworks(getSheetValue(source, [
+      "wifiNetworks",
+      "wifi_networks",
+      "wifi",
+    ])),
+    breakfast: parseBreakfastEntries(getSheetValue(source, [
+      "breakfastEntries",
+      "breakfast_entries",
+      "breakfast",
+    ])),
+    baths: parseBathEntries(getSheetValue(source, [
+      "bathEntries",
+      "bath_entries",
+      "baths",
+      "bath",
+    ])),
+    facilities: parseFacilityEntries(getSheetValue(source, [
+      "facilityEntries",
+      "facility_entries",
+      "facilities",
+    ])),
     facilityLocations: parseFacilityLocationEntries(
-      getSheetValue(source, "facilityLocationEntries"),
+      getSheetValue(source, [
+        "facilityLocationEntries",
+        "facility_location_entries",
+        "facilityLocations",
+        "facility_locations",
+      ]),
     ),
-    amenities: parseAmenityEntries(getSheetValue(source, "amenityEntries")),
-    parking: parseParkingEntries(getSheetValue(source, "parkingEntries")),
-    emergency: parseEmergencyEntries(getSheetValue(source, "emergencyEntries")),
-    faq: parseFaqEntries(getSheetValue(source, "faqEntries")),
-    checkout: parseCheckoutEntries(getSheetValue(source, "checkoutEntries")),
-    roomService: parseRoomServiceEntries(getSheetValue(source, "roomServiceEntries")),
-    transport: parseTransportEntries(getSheetValue(source, "transportEntries")),
-    nearbySpots: parseNearbySpotEntries(getSheetValue(source, "nearbySpotEntries")),
+    amenities: parseAmenityEntries(getSheetValue(source, [
+      "amenityEntries",
+      "amenity_entries",
+      "amenities",
+    ])),
+    parking: parseParkingEntries(getSheetValue(source, [
+      "parkingEntries",
+      "parking_entries",
+      "parking",
+    ])),
+    emergency: parseEmergencyEntries(getSheetValue(source, [
+      "emergencyEntries",
+      "emergency_entries",
+      "emergency",
+    ])),
+    faq: parseFaqEntries(getSheetValue(source, [
+      "faqEntries",
+      "faq_entries",
+      "faq",
+    ])),
+    checkout: parseCheckoutEntries(getSheetValue(source, [
+      "checkoutEntries",
+      "checkout_entries",
+      "checkout",
+    ])),
+    roomService: parseRoomServiceEntries(getSheetValue(source, [
+      "roomServiceEntries",
+      "room_service_entries",
+      "roomService",
+      "room_service",
+    ])),
+    transport: parseTransportEntries(getSheetValue(source, [
+      "transportEntries",
+      "transport_entries",
+      "transport",
+    ])),
+    nearbySpots: parseNearbySpotEntries(getSheetValue(source, [
+      "nearbySpotEntries",
+      "nearby_spot_entries",
+      "nearbySpots",
+      "nearby_spots",
+    ])),
   };
 }
 

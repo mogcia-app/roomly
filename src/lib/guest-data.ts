@@ -171,6 +171,25 @@ function createEmptyKnowledge(): HearingSheetKnowledge {
   };
 }
 
+function summarizeKnowledgeCounts(knowledge: HearingSheetKnowledge) {
+  return {
+    frontDeskHours: knowledge.frontDeskHours.length,
+    wifi: knowledge.wifi.length,
+    breakfast: knowledge.breakfast.length,
+    baths: knowledge.baths.length,
+    facilities: knowledge.facilities.length,
+    facilityLocations: knowledge.facilityLocations.length,
+    amenities: knowledge.amenities.length,
+    parking: knowledge.parking.length,
+    emergency: knowledge.emergency.length,
+    faq: knowledge.faq.length,
+    checkout: knowledge.checkout.length,
+    roomService: knowledge.roomService.length,
+    transport: knowledge.transport.length,
+    nearbySpots: knowledge.nearbySpots.length,
+  };
+}
+
 function dedupeEntries<T>(entries: T[]) {
   const seen = new Set<string>();
   return entries.filter((entry) => {
@@ -655,6 +674,21 @@ export async function getGuestStayStatusFromStore(
     const fallbackKnowledge = fallbackRoom?.hearingSheetKnowledge ?? createEmptyKnowledge();
     const mergedKnowledge = mergeKnowledge(knowledge, fallbackKnowledge);
     const prompts = buildPromptCandidates(mergedKnowledge);
+
+    console.info("[guest/data] resolved stay status", {
+      roomId,
+      hotelId,
+      hotelIdHint,
+      stayId: activeStay?.id ?? null,
+      stayActive: Boolean(activeStay),
+      selectedLanguage,
+      stayLanguage,
+      roomRecordFound: true,
+      hearingSheetFound: Boolean(hearingSheet),
+      roomKnowledgeCounts: summarizeKnowledgeCounts(roomKnowledge),
+      hotelKnowledgeCounts: summarizeKnowledgeCounts(hotelKnowledge),
+      mergedKnowledgeCounts: summarizeKnowledgeCounts(mergedKnowledge),
+    });
 
     return {
       roomId,

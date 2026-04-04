@@ -563,6 +563,29 @@ function takeFormatted(values: string[]) {
   return values.slice(0, 2).join("\n");
 }
 
+function summarizeKnowledgeAvailability(knowledge: GuestStayStatus["hearingSheetKnowledge"]) {
+  if (!knowledge) {
+    return null;
+  }
+
+  return {
+    frontDeskHours: knowledge.frontDeskHours.length,
+    wifi: knowledge.wifi.length,
+    breakfast: knowledge.breakfast.length,
+    baths: knowledge.baths.length,
+    facilities: knowledge.facilities.length,
+    facilityLocations: knowledge.facilityLocations.length,
+    amenities: knowledge.amenities.length,
+    parking: knowledge.parking.length,
+    emergency: knowledge.emergency.length,
+    faq: knowledge.faq.length,
+    checkout: knowledge.checkout.length,
+    roomService: knowledge.roomService.length,
+    transport: knowledge.transport.length,
+    nearbySpots: knowledge.nearbySpots.length,
+  };
+}
+
 function formatBoolean(value: boolean | null, truthy: string, falsy: string) {
   if (value === true) {
     return truthy;
@@ -1149,8 +1172,22 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
 
   const bestKnowledgeReply = findBestKnowledgeReply(stayStatus, body);
   if (bestKnowledgeReply) {
+    console.info("[guest/ai] matched knowledge reply", {
+      roomId: stayStatus.roomId,
+      hotelId: stayStatus.hotelId ?? null,
+      body,
+      knowledgeCounts: summarizeKnowledgeAvailability(knowledge),
+      replyPreview: bestKnowledgeReply.slice(0, 120),
+    });
     return bestKnowledgeReply;
   }
+
+  console.warn("[guest/ai] falling back to front desk", {
+    roomId: stayStatus.roomId,
+    hotelId: stayStatus.hotelId ?? null,
+    body,
+    knowledgeCounts: summarizeKnowledgeAvailability(knowledge),
+  });
 
   return frontDeskFallback;
 }

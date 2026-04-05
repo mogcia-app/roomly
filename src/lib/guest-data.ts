@@ -567,7 +567,6 @@ function parseKnowledgeFromSource(
 
 function buildPromptCandidates(knowledge: HearingSheetKnowledge) {
   const prompts = [
-    knowledge.wifi[0]?.ssid ? `Wi-Fi: ${knowledge.wifi[0].ssid}` : null,
     knowledge.breakfast[0]?.hours
       ? `朝食: ${knowledge.breakfast[0].hours}${
           knowledge.breakfast[0].location ? ` ${knowledge.breakfast[0].location}` : ""

@@ -46,31 +46,18 @@ type GuestChatComposerProps = {
   language: GuestLanguage;
   mode: "ai" | "human";
   richMenu: GuestRichMenu | null;
-  prompts: string[];
   onOptimisticSend: (message: DisplayMessage) => void;
 };
 
-type StarterActionsProps = {
+type GuestActionPanelProps = {
   roomId: string;
   roomLabel?: string;
   language: GuestLanguage;
+  prompts: string[];
+  showIntro?: boolean;
   onOptimisticSend: (message: DisplayMessage) => void;
 };
 let optimisticMessageSequence = 0;
-
-function shouldOfferHumanHandoff(message: GuestMessage) {
-  if (message.sender !== "ai" && message.sender !== "system") {
-    return false;
-  }
-
-  return (
-    message.body.includes("フロントへご確認ください") ||
-    message.body.includes("フロントへおつなぎ") ||
-    message.body.includes("Please check with the front desk") ||
-    message.body.includes("请向前台确认") ||
-    message.body.includes("프런트로 확인")
-  );
-}
 
 function getGuestLocale(language: GuestLanguage) {
   if (language === "en") {
@@ -183,12 +170,43 @@ function createOptimisticMessage(
   };
 }
 
+function getGuestActionCopy(language: GuestLanguage) {
+  if (language === "en") {
+    return {
+      helperBody: "Choose how you want to continue.",
+      aiPrompt: "What would you like help with? Choose from the topics the hotel has registered.",
+      aiEmpty: "No AI guide topics are registered yet. Please type your question or contact the front desk.",
+    };
+  }
+
+  if (language === "zh-CN") {
+    return {
+      helperBody: "请选择您想继续的方式。",
+      aiPrompt: "请问您想了解什么？以下仅显示酒店已登记的说明内容。",
+      aiEmpty: "当前没有已登记的 AI 说明项目。请直接输入问题，或联系前台。",
+    };
+  }
+
+  if (language === "ko") {
+    return {
+      helperBody: "원하시는 진행 방법을 선택해 주세요.",
+      aiPrompt: "무엇이 궁금하신가요? 아래에는 호텔에 등록된 안내 항목만 표시됩니다.",
+      aiEmpty: "등록된 AI 안내 항목이 없습니다. 직접 질문하시거나 프런트에 문의해 주세요.",
+    };
+  }
+
+  return {
+    helperBody: "ご希望の方法を選んでください。",
+    aiPrompt: "何についてお困りですか？下にはホテルに登録されている案内項目だけを表示しています。",
+    aiEmpty: "AIで案内できる登録項目がまだありません。直接入力するか、フロントへご依頼ください。",
+  };
+}
+
 function GuestChatInput({
   roomId,
   language,
   mode,
   richMenu,
-  prompts,
   onOptimisticSend,
 }: GuestChatComposerProps) {
   const router = useRouter();
@@ -395,22 +413,6 @@ function GuestChatInput({
         </div>
       ) : null}
 
-      {prompts.length > 0 ? (
-        <div className="mb-2 flex gap-2 overflow-x-auto px-3 pb-1 lg:mb-2 lg:px-8">
-          {prompts.map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              disabled={isPending}
-              onClick={() => submitMessage(prompt)}
-              className="shrink-0 rounded-full border border-[#e7ddd8] bg-white px-3 py-1.5 text-[12px] font-light text-[#7a6056] shadow-[0_4px_14px_rgba(72,47,35,0.04)] transition disabled:opacity-60 lg:px-3 lg:py-1 lg:text-[11px]"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       <div className="border-t border-[#e7ddd8] bg-white">
         <div className="flex items-center gap-2 px-3 pb-2 pt-2 lg:px-8">
         <button
@@ -474,19 +476,23 @@ function GuestChatInput({
   );
 }
 
-function StarterActions({
+function GuestActionPanel({
   roomId,
   roomLabel,
   language,
+  prompts,
+  showIntro = false,
   onOptimisticSend,
-}: StarterActionsProps) {
+}: GuestActionPanelProps) {
   const router = useRouter();
   const ui = getGuestUiCopy(language);
+  const actionCopy = getGuestActionCopy(language);
   const [isRequestOptionsOpen, setIsRequestOptionsOpen] = useState(false);
+  const [isAiOptionsOpen, setIsAiOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  async function sendAiStarter(body: string) {
+  async function submitAiPrompt(body: string) {
     setError(null);
 
     onOptimisticSend(createOptimisticMessage("starter", "guest", body));
@@ -552,8 +558,8 @@ function StarterActions({
         </div>
         <div className="max-w-[82%] rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:max-w-[48%] xl:max-w-[42%]">
           <div className="whitespace-pre-line">
-            {roomLabel ? `${roomLabel}様\n` : ""}
-            {ui.introMessage}
+            {showIntro && roomLabel ? `${roomLabel}様\n` : ""}
+            {showIntro ? ui.introMessage : actionCopy.helperBody}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
@@ -561,6 +567,7 @@ function StarterActions({
               disabled={isPending}
               onClick={() => {
                 setIsRequestOptionsOpen((current) => !current);
+                setIsAiOptionsOpen(false);
               }}
               className="flex w-full items-start rounded-[18px] border border-[#e7ddd8] bg-white px-3.5 py-3 text-left transition disabled:opacity-60"
             >
@@ -575,7 +582,8 @@ function StarterActions({
               type="button"
               disabled={isPending}
               onClick={() => {
-                void sendAiStarter(ui.roomGuideStarterBody);
+                setIsAiOptionsOpen((current) => !current);
+                setIsRequestOptionsOpen(false);
               }}
               className="flex w-full items-start rounded-[18px] border border-[#e7ddd8] bg-[#fffaf7] px-3.5 py-3 text-left transition disabled:opacity-60"
             >
@@ -587,6 +595,31 @@ function StarterActions({
               </div>
             </button>
           </div>
+          {isAiOptionsOpen ? (
+            <div className="mt-2 rounded-[18px] border border-[#ebe1dc] bg-[#fffaf7] px-3 py-3">
+              <div className="mb-2 text-[12px] font-light leading-5 text-[#7a554a]">
+                {prompts.length > 0 ? actionCopy.aiPrompt : actionCopy.aiEmpty}
+              </div>
+              {prompts.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {prompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => {
+                        void submitAiPrompt(prompt);
+                        setIsAiOptionsOpen(false);
+                      }}
+                      className="rounded-full border border-[#e7ddd8] bg-white px-3 py-1.5 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {isRequestOptionsOpen ? (
             <div className="mt-2 rounded-[18px] border border-[#ebe1dc] bg-[#fffaf7] px-3 py-3">
               <div className="mb-2 text-[12px] font-light text-[#7a554a]">
@@ -635,76 +668,6 @@ function HumanStarter({ language }: { language: GuestLanguage }) {
   );
 }
 
-function HumanHandoffCta({
-  roomId,
-  language,
-  onOptimisticSend,
-}: StarterActionsProps) {
-  const router = useRouter();
-  const ui = getGuestUiCopy(language);
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  async function requestHandoff() {
-    setError(null);
-    const requestLabel =
-      language === "en"
-        ? "Please connect me to the front desk."
-        : language === "zh-CN"
-          ? "请帮我联系前台。"
-          : language === "ko"
-            ? "프런트로 연결해 주세요."
-            : "フロント対応をお願いします。";
-
-    onOptimisticSend(
-      createOptimisticMessage("handoff-request", "guest", requestLabel),
-    );
-
-    const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
-
-    if (!response.ok) {
-      setError(ui.handoffError);
-      return;
-    }
-
-    startTransition(() => {
-      router.push(`/guest/${roomId}/chat?mode=human`);
-    });
-  }
-
-  return (
-    <div className="mt-3">
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={() => {
-          void requestHandoff();
-        }}
-        className="w-full rounded-[18px] border border-[#e7ddd8] bg-white px-4 py-3 text-sm font-light text-[#7a554a] shadow-[0_8px_20px_rgba(72,47,35,0.04)] transition hover:bg-[#fffaf7] disabled:opacity-60"
-      >
-        {language === "en"
-          ? "Ask the front desk"
-          : language === "zh-CN"
-            ? "联系前台"
-            : language === "ko"
-              ? "프런트에 문의"
-              : "フロントに聞く"}
-      </button>
-      {error ? (
-        <div className="mt-2 rounded-[16px] border border-[#f2d3cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#ad2218]">
-          {error}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function GuestChatExperience({
   debugInfo,
   roomId,
@@ -739,11 +702,6 @@ export function GuestChatExperience({
 
     return messages;
   }, [hasGuestMessage, messages, mode]);
-  const latestAssistMessage = [...visibleMessages]
-    .reverse()
-    .find((message) => message.sender === "ai" || message.sender === "system");
-  const showHumanHandoffCta =
-    mode === "ai" && latestAssistMessage ? shouldOfferHumanHandoff(latestAssistMessage) : false;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -769,10 +727,12 @@ export function GuestChatExperience({
           </div>
         ) : null}
         {!hasGuestMessage && mode === "ai" ? (
-          <StarterActions
+          <GuestActionPanel
             roomId={roomId}
             roomLabel={roomLabel}
             language={language}
+            prompts={prompts}
+            showIntro
             onOptimisticSend={(message) => {
               setOptimisticMessages((current) => [...current, message]);
             }}
@@ -852,28 +812,25 @@ export function GuestChatExperience({
               </div>
             );
           })}
+          {mode === "ai" && hasGuestMessage ? (
+            <GuestActionPanel
+              roomId={roomId}
+              language={language}
+              prompts={prompts}
+              onOptimisticSend={(message) => {
+                setOptimisticMessages((current) => [...current, message]);
+              }}
+            />
+          ) : null}
           <div ref={bottomRef} />
         </div>
       </section>
-
-      {showHumanHandoffCta ? (
-        <div className="border-t border-[#e7ddd8] bg-[linear-gradient(180deg,#fffdfb_0%,#faf5f1_100%)] px-3 pt-3 lg:px-8">
-          <HumanHandoffCta
-            roomId={roomId}
-            language={language}
-            onOptimisticSend={(message) => {
-              setOptimisticMessages((current) => [...current, message]);
-            }}
-          />
-        </div>
-      ) : null}
 
       <GuestChatInput
         roomId={roomId}
         language={language}
         mode={mode}
         richMenu={richMenu}
-        prompts={prompts}
         onOptimisticSend={(message) => {
           setOptimisticMessages((current) => [...current, message]);
         }}

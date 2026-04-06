@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  GUEST_RICH_MENU_ACTION_SPECS,
   GUEST_RICH_MENU_ACTION_REQUIREMENTS,
   isGuestRichMenuActionType,
 } from "@/lib/guest-contract";
@@ -216,6 +217,55 @@ function GuestChatInput({
   const [isRichMenuOpen, setIsRichMenuOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  async function postGuestMessage(body: string, nextMode: "ai" | "human") {
+    return fetch(`/api/guest/rooms/${roomId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        body,
+        mode: nextMode,
+      }),
+    });
+  }
+
+  async function postAiStarterMessage(body: string) {
+    return fetch(`/api/guest/rooms/${roomId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        body,
+        mode: "ai",
+        kind: "ai_starter",
+      }),
+    });
+  }
+
+  async function postHumanHandoff(category?: string) {
+    return fetch(`/api/guest/rooms/${roomId}/handoff`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(category ? { category } : {}),
+    });
+  }
+
+  async function switchLanguage(languageCode: string) {
+    return fetch(`/api/guest/rooms/${roomId}/language`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        language: languageCode,
+      }),
+    });
+  }
+
   async function submitMessage(body: string) {
     const trimmed = body.trim();
 
@@ -227,16 +277,7 @@ function GuestChatInput({
     setError(null);
     setMessage("");
 
-    const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        body: trimmed,
-        mode,
-      }),
-    });
+    const response = await postGuestMessage(trimmed, mode);
 
     if (!response.ok) {
       setError(ui.messageSendError);
@@ -261,6 +302,8 @@ function GuestChatInput({
       return;
     }
 
+    const actionSpec = GUEST_RICH_MENU_ACTION_SPECS[action.actionType];
+
     const requiredField = GUEST_RICH_MENU_ACTION_REQUIREMENTS[action.actionType];
 
     if (requiredField && !action[requiredField]) {
@@ -274,24 +317,15 @@ function GuestChatInput({
       return;
     }
 
-    if (action.actionType === "external_link" && action.url) {
+    if (actionSpec.opensExternalUrl && action.actionType === "external_link" && action.url) {
       window.open(action.url, "_blank", "noopener,noreferrer");
       return;
     }
 
     if (action.actionType === "ai_prompt" && action.prompt) {
-      onOptimisticSend(createOptimisticMessage("rich-prompt", "guest", action.prompt));
+      onOptimisticSend(createOptimisticMessage("rich-prompt", "ai", action.prompt));
 
-      const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          body: action.prompt,
-          mode: "ai",
-        }),
-      });
+      const response = await postAiStarterMessage(action.prompt);
 
       if (!response.ok) {
         setError(ui.messageSendError);
@@ -316,13 +350,7 @@ function GuestChatInput({
         createOptimisticMessage("handoff-category", "guest", action.handoffCategory),
       );
 
-      const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ category: action.handoffCategory }),
-      });
+      const response = await postHumanHandoff(action.handoffCategory);
 
       if (!response.ok) {
         setError(ui.handoffError);
@@ -336,13 +364,7 @@ function GuestChatInput({
     }
 
     if (action.actionType === "human_handoff") {
-      const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
+      const response = await postHumanHandoff();
 
       if (!response.ok) {
         setError(ui.handoffError);
@@ -356,6 +378,21 @@ function GuestChatInput({
     }
 
     if (action.actionType === "language") {
+      if (action.languageCode) {
+        const languageCode = action.languageCode;
+        const response = await switchLanguage(languageCode);
+
+        if (!response.ok) {
+          setError(ui.menuUnavailableError);
+          return;
+        }
+
+        startTransition(() => {
+          router.push(`/guest/${roomId}/chat?lang=${encodeURIComponent(languageCode)}`);
+        });
+        return;
+      }
+
       startTransition(() => {
         router.push(`/guest/${roomId}/language`);
       });

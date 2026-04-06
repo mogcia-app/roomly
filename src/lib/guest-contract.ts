@@ -1,3 +1,5 @@
+import type { GuestLanguage } from "@/lib/guest-demo";
+
 export const GUEST_HEARING_SHEETS_COLLECTION = "hearing_sheets";
 export const GUEST_RICH_MENUS_COLLECTION = "guest_rich_menus";
 
@@ -24,16 +26,80 @@ export const GUEST_RICH_MENU_ACTION_TYPES = [
 export type GuestRichMenuActionType =
   (typeof GUEST_RICH_MENU_ACTION_TYPES)[number];
 
+export type GuestRichMenuActionField =
+  | "url"
+  | "handoffCategory"
+  | "prompt"
+  | "languageCode";
+
+export type GuestRichMenuActionSpec = {
+  requiredField: GuestRichMenuActionField | null;
+  opensExternalUrl: boolean;
+  navigationTarget: "none" | "chat_ai" | "chat_human" | "language";
+  composerBehavior: "none" | "auto_send";
+  description: string;
+};
+
+export const GUEST_RICH_MENU_ACTION_SPECS: Record<
+  GuestRichMenuActionType,
+  GuestRichMenuActionSpec
+> = {
+  external_link: {
+    requiredField: "url",
+    opensExternalUrl: true,
+    navigationTarget: "none",
+    composerBehavior: "none",
+    description: "Open the configured external URL in a new tab.",
+  },
+  handoff_category: {
+    requiredField: "handoffCategory",
+    opensExternalUrl: false,
+    navigationTarget: "chat_human",
+    composerBehavior: "none",
+    description:
+      "Start the human handoff flow with the configured category and move to human chat.",
+  },
+  language: {
+    requiredField: null,
+    opensExternalUrl: false,
+    navigationTarget: "language",
+    composerBehavior: "none",
+    description:
+      "Open the language selector, or switch directly when languageCode is provided.",
+  },
+  ai_prompt: {
+    requiredField: "prompt",
+    opensExternalUrl: false,
+    navigationTarget: "chat_ai",
+    composerBehavior: "none",
+    description:
+      "Start the AI conversation with the configured prompt as an AI message.",
+  },
+  human_handoff: {
+    requiredField: null,
+    opensExternalUrl: false,
+    navigationTarget: "chat_human",
+    composerBehavior: "none",
+    description:
+      "Start the human handoff flow immediately and move to human chat.",
+  },
+};
+
 export const GUEST_RICH_MENU_ACTION_REQUIREMENTS: Record<
   GuestRichMenuActionType,
-  "url" | "handoffCategory" | "prompt" | null
-> = {
-  external_link: "url",
-  handoff_category: "handoffCategory",
-  language: null,
-  ai_prompt: "prompt",
-  human_handoff: null,
-};
+  GuestRichMenuActionField | null
+> = Object.fromEntries(
+  Object.entries(GUEST_RICH_MENU_ACTION_SPECS).map(([actionType, spec]) => [
+    actionType,
+    spec.requiredField,
+  ]),
+) as Record<GuestRichMenuActionType, GuestRichMenuActionField | null>;
+
+export function isGuestRichMenuActionLanguageCode(
+  value: unknown,
+): value is GuestLanguage {
+  return value === "ja" || value === "en" || value === "zh-CN" || value === "ko";
+}
 
 export const GUEST_FIREBASE_ADMIN_ENV_KEYS = [
   "FIREBASE_SERVICE_ACCOUNT_JSON",

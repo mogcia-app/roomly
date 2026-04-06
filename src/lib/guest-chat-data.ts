@@ -1402,3 +1402,34 @@ export async function postGuestMessageToStore(
 
   return { ok: true as const, threadId };
 }
+
+export async function postGuestAiStarterToStore(
+  stayStatus: GuestStayStatus,
+  body: string,
+) {
+  const trimmedBody = body.trim();
+
+  if (!trimmedBody) {
+    return { ok: false as const, error: "EMPTY_MESSAGE" };
+  }
+
+  if (!hasFirebaseAdminCredentials()) {
+    return { ok: true as const, threadId: "demo-ai" };
+  }
+
+  const threadId = await ensureThread(stayStatus, "ai");
+
+  await addMessage(
+    threadId,
+    "ai",
+    await buildTranslationPayload({
+      displayBody: trimmedBody,
+      guestLanguage: stayStatus.selectedLanguage,
+      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    }),
+  );
+
+  return { ok: true as const, threadId };
+}

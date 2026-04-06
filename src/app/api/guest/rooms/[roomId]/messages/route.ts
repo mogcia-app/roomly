@@ -1,6 +1,9 @@
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
-import { postGuestMessageToStore } from "@/lib/guest-chat-data";
+import {
+  postGuestAiStarterToStore,
+  postGuestMessageToStore,
+} from "@/lib/guest-chat-data";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
@@ -8,6 +11,7 @@ export const runtime = "nodejs";
 type GuestMessagePayload = {
   body?: string;
   mode?: "ai" | "human";
+  kind?: "guest_message" | "ai_starter";
 };
 
 export async function POST(
@@ -46,7 +50,9 @@ export async function POST(
       return Response.json({ error: "ACTIVE_STAY_NOT_FOUND" }, { status: 409 });
     }
 
-    const result = await postGuestMessageToStore(stayStatus, mode, payload.body);
+    const result = payload.kind === "ai_starter"
+      ? await postGuestAiStarterToStore(stayStatus, payload.body)
+      : await postGuestMessageToStore(stayStatus, mode, payload.body);
 
     if (!result.ok) {
       return Response.json({ error: result.error }, { status: 400 });

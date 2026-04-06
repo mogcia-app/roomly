@@ -47,6 +47,11 @@ type FirestoreChatThread = {
   updated_at?: unknown;
 };
 
+type ChatThreadCandidate = {
+  id: string;
+  updatedAt: number;
+};
+
 type FirestoreMessage = {
   thread_id?: string;
   threadId?: string;
@@ -368,27 +373,55 @@ async function findThread(
 ) {
   const db = getAdminDb();
   const stayKey = stayStatus.stayId ?? stayStatus.roomId;
+  const toUpdatedAt = (value: unknown) =>
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+      ? value.toDate().getTime()
+      : 0;
+  const pickLatestThread = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) => {
+    const candidates = docs.map((docSnapshot) => {
+      const data = docSnapshot.data() as FirestoreChatThread;
+      return {
+        id: docSnapshot.id,
+        updatedAt: Math.max(
+          toUpdatedAt(data.updated_at),
+          toUpdatedAt(data.created_at),
+          toUpdatedAt(data.last_message_at),
+        ),
+      } satisfies ChatThreadCandidate;
+    });
+
+    return candidates.sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null;
+  };
 
   const snapshot = await db
     .collection("chat_threads")
     .where("stay_id", "==", stayKey)
     .where("mode", "==", mode)
-    .limit(1)
     .get();
 
   if (!snapshot.empty) {
-    return snapshot.docs[0];
+    const latestThread = pickLatestThread(snapshot.docs);
+
+    if (latestThread) {
+      return db.collection("chat_threads").doc(latestThread.id).get();
+    }
   }
 
   const altSnapshot = await db
     .collection("chat_threads")
     .where("stayId", "==", stayKey)
     .where("mode", "==", mode)
-    .limit(1)
     .get();
 
   if (!altSnapshot.empty) {
-    return altSnapshot.docs[0];
+    const latestThread = pickLatestThread(altSnapshot.docs);
+
+    if (latestThread) {
+      return db.collection("chat_threads").doc(latestThread.id).get();
+    }
   }
 
   return null;
@@ -475,6 +508,46 @@ async function updateHumanThreadMetadata(
     } satisfies FirestoreChatThread & {
       last_message_at: unknown;
       unread_count_front: unknown;
+      updated_at: unknown;
+      created_at: unknown;
+    },
+    { merge: true },
+  );
+}
+
+async function updateAiThreadMetadata(
+  threadId: string,
+  stayStatus: GuestStayStatus,
+  lastMessageBody: string,
+  lastMessageSender: "guest" | "ai" | "front" | "system",
+) {
+  const roomDisplayName = resolveRoomDisplayName({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+    display_name: stayStatus.roomDisplayName ?? stayStatus.roomLabel,
+  });
+  const roomNumber = resolveRoomNumber({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+  });
+
+  await getAdminDb().collection("chat_threads").doc(threadId).set(
+    {
+      stay_id: stayStatus.stayId ?? stayStatus.roomId,
+      room_id: stayStatus.roomId,
+      room_display_name: roomDisplayName,
+      room_number: roomNumber,
+      hotel_id: stayStatus.hotelId ?? null,
+      mode: "ai" satisfies ThreadMode,
+      status: "resolved" as const,
+      guest_language: stayStatus.selectedLanguage,
+      last_message_body: lastMessageBody,
+      last_message_at: FieldValue.serverTimestamp(),
+      last_message_sender: lastMessageSender,
+      updated_at: FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
+    } satisfies FirestoreChatThread & {
+      last_message_at: unknown;
       updated_at: unknown;
       created_at: unknown;
     },
@@ -1377,6 +1450,8 @@ export async function postGuestMessageToStore(
         frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
       }),
     );
+
+    await updateAiThreadMetadata(threadId, stayStatus, aiReply, "ai");
   }
 
   if (mode === "human") {
@@ -1417,7 +1492,7 @@ export async function postGuestAiStarterToStore(
     return { ok: true as const, threadId: "demo-ai" };
   }
 
-  const threadId = await ensureThread(stayStatus, "ai");
+  const threadId = await createThread(stayStatus, "ai");
 
   await addMessage(
     threadId,
@@ -1430,6 +1505,8 @@ export async function postGuestAiStarterToStore(
       frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
     }),
   );
+
+  await updateAiThreadMetadata(threadId, stayStatus, trimmedBody, "ai");
 
   return { ok: true as const, threadId };
 }

@@ -17,6 +17,7 @@ type GuestChatPageProps = {
     debug?: string;
     lang?: string;
     mode?: string;
+    thread?: string;
   }>;
 };
 
@@ -46,7 +47,7 @@ export default async function GuestChatPage({
   searchParams,
 }: GuestChatPageProps) {
   const { roomId: accessToken } = await params;
-  const { debug, lang, mode } = await searchParams;
+  const { debug, lang, mode, thread: threadId } = await searchParams;
 
   let access;
 
@@ -107,7 +108,7 @@ export default async function GuestChatPage({
       }
     : null;
   const [thread, richMenu] = await Promise.all([
-    getGuestMessagesFromStore(room, currentMode),
+    getGuestMessagesFromStore(room, currentMode, threadId ?? null),
     getGuestRichMenuByHotelId(room.hotelId),
   ]);
 

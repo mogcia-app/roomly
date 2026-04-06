@@ -231,7 +231,7 @@ function GuestChatInput({
   }
 
   async function postAiStarterMessage(body: string) {
-    return fetch(`/api/guest/rooms/${roomId}/messages`, {
+    const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -242,6 +242,15 @@ function GuestChatInput({
         kind: "ai_starter",
       }),
     });
+
+    const payload = response.ok
+      ? await response.json() as { threadId?: string }
+      : null;
+
+    return {
+      ok: response.ok,
+      threadId: payload?.threadId ?? null,
+    };
   }
 
   async function postHumanHandoff(category?: string) {
@@ -334,9 +343,13 @@ function GuestChatInput({
 
       startTransition(() => {
         if (mode !== "ai") {
-          router.push(`/guest/${roomId}/chat?mode=ai`);
+          router.push(
+            `/guest/${roomId}/chat?mode=ai${response.threadId ? `&thread=${encodeURIComponent(response.threadId)}` : ""}`,
+          );
         } else {
-          router.refresh();
+          router.push(
+            `/guest/${roomId}/chat?mode=ai${response.threadId ? `&thread=${encodeURIComponent(response.threadId)}` : ""}`,
+          );
         }
       });
       return;

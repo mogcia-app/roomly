@@ -1325,12 +1325,21 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
 export async function getGuestMessagesFromStore(
   stayStatus: GuestStayStatus,
   mode: ThreadMode,
+  threadId?: string | null,
 ) {
   if (!hasFirebaseAdminCredentials()) {
     return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
   }
 
   try {
+    if (threadId) {
+      const messages = await getMessagesByThreadId(threadId);
+
+      if (messages.length > 0) {
+        return messages;
+      }
+    }
+
     const thread = await findThread(stayStatus, mode);
 
     if (!thread) {

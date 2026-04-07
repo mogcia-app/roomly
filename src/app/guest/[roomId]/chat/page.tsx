@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 
 import { GuestChatExperience } from "@/components/guest/GuestChatExperience";
 import {
-  getGuestLanguageLabel,
   isGuestLanguage,
   type GuestLanguage,
 } from "@/lib/guest-demo";
@@ -59,6 +58,22 @@ function getLanguageSettingsLabel(language: GuestLanguage) {
   }
 
   return "言語";
+}
+
+function getLanguageShortLabel(language: GuestLanguage) {
+  if (language === "en") {
+    return "En";
+  }
+
+  if (language === "zh-CN") {
+    return "Zh";
+  }
+
+  if (language === "ko") {
+    return "Ko";
+  }
+
+  return "Ja";
 }
 
 export default async function GuestChatPage({
@@ -175,7 +190,7 @@ export default async function GuestChatPage({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.9 7.5h14.2M2.9 12.5h14.2M10 2.8c1.9 1.9 3 4.5 3 7.2s-1.1 5.3-3 7.2m0-14.4C8.1 4.7 7 7.3 7 10s1.1 5.3 3 7.2" />
                 </svg>
                 <span>{getLanguageSettingsLabel(currentLanguage)}</span>
-                <span className="text-[#b49a8d]">{getGuestLanguageLabel(currentLanguage)}</span>
+                <span className="text-[#b49a8d]">{getLanguageShortLabel(currentLanguage)}</span>
               </Link>
             </div>
           </div>

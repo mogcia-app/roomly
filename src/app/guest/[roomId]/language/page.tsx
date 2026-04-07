@@ -12,7 +12,7 @@ type GuestLanguagePageProps = {
   searchParams: Promise<{ debug?: string }>;
 };
 
-const languages: GuestLanguage[] = ["ja", "en", "zh-CN", "ko"];
+const languages: GuestLanguage[] = ["ja", "en", "zh-CN", "zh-TW", "ko"];
 
 export default async function GuestLanguagePage({
   params,

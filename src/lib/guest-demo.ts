@@ -1,6 +1,6 @@
 import type { GuestTranslationState } from "@/lib/guest-contract";
 
-export type GuestLanguage = "ja" | "en" | "zh-CN" | "ko";
+export type GuestLanguage = "ja" | "en" | "zh-CN" | "zh-TW" | "ko";
 
 export type GuestMessage = {
   id: string;
@@ -322,6 +322,7 @@ const languageLabels: Record<GuestLanguage, string> = {
   ja: "日本語",
   en: "English",
   "zh-CN": "简体中文",
+  "zh-TW": "繁體中文",
   ko: "한국어",
 };
 
@@ -392,6 +393,28 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     roomGuideStarterBody: "请介绍一下馆内设施和客房使用方法。",
     requestCategories: ["牙刷", "加送毛巾", "清扫整理", "其他请求"],
   },
+  "zh-TW": {
+    todayLabel: "今天",
+    aiLabel: "AI",
+    frontLabel: "前台",
+    sendLabel: "發送",
+    sendingLabel: "發送中...",
+    readLabel: "已讀",
+    messagePlaceholder: "請輸入訊息",
+    messageSendError: "訊息發送失敗，請再試一次。",
+    aiStarterError: "無法開始 AI 對話，請再試一次。",
+    handoffError: "無法通知前台，請再試一次。",
+    menuUnavailableError: "此選單目前無法使用。請向前台確認。",
+    introMessage: "請告訴我們您的需求。我們會依內容為您提供協助。",
+    deliveryTitle: "送達 / 請求",
+    deliveryDescription: "可向前台發送備品追加等請求。",
+    roomGuideTitle: "館內 / 客房說明",
+    roomGuideDescription: "AI 會先即時為您說明。",
+    requestPrompt: "請選擇請求內容",
+    humanStarterMessage: "正在為您連接前台，工作人員稍後回覆。",
+    roomGuideStarterBody: "請介紹一下館內設施和客房使用方式。",
+    requestCategories: ["牙刷", "加送毛巾", "清掃整理", "其他請求"],
+  },
   ko: {
     todayLabel: "오늘",
     aiLabel: "AI",
@@ -445,7 +468,7 @@ export function getGuestUiCopy(language: GuestLanguage): GuestUiCopy {
 }
 
 export function isGuestLanguage(value: string | undefined): value is GuestLanguage {
-  return value === "ja" || value === "en" || value === "zh-CN" || value === "ko";
+  return value === "ja" || value === "en" || value === "zh-CN" || value === "zh-TW" || value === "ko";
 }
 
 export function getGuestThread(
@@ -466,6 +489,8 @@ export function getGuestThread(
             ? "The front desk has joined the chat."
             : language === "zh-CN"
               ? "前台已加入聊天。"
+              : language === "zh-TW"
+                ? "前台已加入聊天。"
               : language === "ko"
                 ? "프런트가 채팅에 참여했습니다."
                 : "フロントがチャットに参加しました。",
@@ -479,6 +504,8 @@ export function getGuestThread(
             ? "Front desk here. Please type your request."
             : language === "zh-CN"
               ? "这里是前台。请输入您的需求。"
+              : language === "zh-TW"
+                ? "這裡是前台。請輸入您的需求。"
               : language === "ko"
                 ? "프런트입니다. 요청 내용을 입력해 주세요."
                 : "フロントです。ご依頼内容を入力してください。",

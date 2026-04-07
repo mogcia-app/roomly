@@ -98,7 +98,7 @@ export const GUEST_RICH_MENU_ACTION_REQUIREMENTS: Record<
 export function isGuestRichMenuActionLanguageCode(
   value: unknown,
 ): value is GuestLanguage {
-  return value === "ja" || value === "en" || value === "zh-CN" || value === "ko";
+  return value === "ja" || value === "en" || value === "zh-CN" || value === "zh-TW" || value === "ko";
 }
 
 export const GUEST_FIREBASE_ADMIN_ENV_KEYS = [

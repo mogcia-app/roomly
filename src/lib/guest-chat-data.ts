@@ -96,6 +96,10 @@ function toLanguageCode(language: GuestLanguage | null | undefined) {
     return "zh-CN";
   }
 
+  if (language === "zh-TW") {
+    return "zh-TW";
+  }
+
   if (language === "ko") {
     return "ko";
   }
@@ -608,6 +612,15 @@ function getLocalizedServerCopy(language: GuestLanguage) {
       handoffWaiting: "已通知前台，请等待回复。",
       frontDeskFallback: "请向前台确认。",
       emergencyFallback: "未找到已登记的紧急联系方式，请立即联系前台。",
+    };
+  }
+
+  if (language === "zh-TW") {
+    return {
+      handoffRequest: "請幫我聯繫前台。",
+      handoffWaiting: "已通知前台，請等待回覆。",
+      frontDeskFallback: "請向前台確認。",
+      emergencyFallback: "未找到已登記的緊急聯絡方式，請立即聯絡前台。",
     };
   }
 

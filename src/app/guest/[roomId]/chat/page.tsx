@@ -53,6 +53,10 @@ function getLanguageSettingsLabel(language: GuestLanguage) {
     return "语言";
   }
 
+  if (language === "zh-TW") {
+    return "語言";
+  }
+
   if (language === "ko") {
     return "언어";
   }
@@ -67,6 +71,10 @@ function getLanguageShortLabel(language: GuestLanguage) {
 
   if (language === "zh-CN") {
     return "Zh";
+  }
+
+  if (language === "zh-TW") {
+    return "Tw";
   }
 
   if (language === "ko") {

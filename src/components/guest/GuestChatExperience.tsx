@@ -88,6 +88,10 @@ function getGuestLocale(language: GuestLanguage) {
     return "zh-CN";
   }
 
+  if (language === "zh-TW") {
+    return "zh-TW";
+  }
+
   if (language === "ko") {
     return "ko-KR";
   }
@@ -139,7 +143,13 @@ function senderAvatar(sender: GuestMessage["sender"], language: GuestLanguage) {
       return {
         kind: "text" as const,
         label:
-          language === "en" ? "F" : language === "zh-CN" ? "前" : language === "ko" ? "프" : "フ",
+          language === "en"
+            ? "F"
+            : language === "zh-CN" || language === "zh-TW"
+              ? "前"
+              : language === "ko"
+                ? "프"
+                : "フ",
       className: "bg-white text-[#6f564b]",
     };
   }
@@ -207,6 +217,14 @@ function getGuestActionCopy(language: GuestLanguage) {
     };
   }
 
+  if (language === "zh-TW") {
+    return {
+      helperBody: "請選擇您想繼續的方式。",
+      aiPrompt: "請問您想了解什麼？以下僅顯示飯店已登記的說明內容。",
+      aiEmpty: "目前沒有已登記的 AI 說明項目。請直接輸入問題，或聯絡前台。",
+    };
+  }
+
   if (language === "ko") {
     return {
       helperBody: "원하시는 진행 방법을 선택해 주세요.",
@@ -230,18 +248,18 @@ type AiGuideOption = {
 
 function getAiGuideLabel(language: GuestLanguage, key: AiGuideOption["key"]) {
   const labels: Record<AiGuideOption["key"], Record<GuestLanguage, string>> = {
-    wifi: { ja: "Wi-Fi", en: "Wi-Fi", "zh-CN": "Wi-Fi", ko: "Wi-Fi" },
-    breakfast: { ja: "朝食", en: "Breakfast", "zh-CN": "早餐", ko: "조식" },
-    bath: { ja: "大浴場", en: "Bath", "zh-CN": "浴场", ko: "대욕장" },
-    facility: { ja: "館内施設", en: "Facilities", "zh-CN": "馆内设施", ko: "시설" },
-    amenity: { ja: "アメニティ", en: "Amenities", "zh-CN": "备品", ko: "어메니티" },
-    parking: { ja: "駐車場", en: "Parking", "zh-CN": "停车场", ko: "주차장" },
-    checkout: { ja: "チェックアウト", en: "Checkout", "zh-CN": "退房", ko: "체크아웃" },
-    emergency: { ja: "緊急時", en: "Emergency", "zh-CN": "紧急情况", ko: "긴급" },
-    roomService: { ja: "ルームサービス", en: "Room service", "zh-CN": "客房服务", ko: "룸서비스" },
-    transport: { ja: "交通案内", en: "Transport", "zh-CN": "交通", ko: "교통" },
-    nearby: { ja: "周辺案内", en: "Nearby spots", "zh-CN": "周边信息", ko: "주변 안내" },
-    frontDesk: { ja: "フロント対応", en: "Front desk", "zh-CN": "前台", ko: "프런트" },
+    wifi: { ja: "Wi-Fi", en: "Wi-Fi", "zh-CN": "Wi-Fi", "zh-TW": "Wi-Fi", ko: "Wi-Fi" },
+    breakfast: { ja: "朝食", en: "Breakfast", "zh-CN": "早餐", "zh-TW": "早餐", ko: "조식" },
+    bath: { ja: "大浴場", en: "Bath", "zh-CN": "浴场", "zh-TW": "浴場", ko: "대욕장" },
+    facility: { ja: "館内施設", en: "Facilities", "zh-CN": "馆内设施", "zh-TW": "館內設施", ko: "시설" },
+    amenity: { ja: "アメニティ", en: "Amenities", "zh-CN": "备品", "zh-TW": "備品", ko: "어메니티" },
+    parking: { ja: "駐車場", en: "Parking", "zh-CN": "停车场", "zh-TW": "停車場", ko: "주차장" },
+    checkout: { ja: "チェックアウト", en: "Checkout", "zh-CN": "退房", "zh-TW": "退房", ko: "체크아웃" },
+    emergency: { ja: "緊急時", en: "Emergency", "zh-CN": "紧急情况", "zh-TW": "緊急情況", ko: "긴급" },
+    roomService: { ja: "ルームサービス", en: "Room service", "zh-CN": "客房服务", "zh-TW": "客房服務", ko: "룸서비스" },
+    transport: { ja: "交通案内", en: "Transport", "zh-CN": "交通", "zh-TW": "交通", ko: "교통" },
+    nearby: { ja: "周辺案内", en: "Nearby spots", "zh-CN": "周边信息", "zh-TW": "周邊資訊", ko: "주변 안내" },
+    frontDesk: { ja: "フロント対応", en: "Front desk", "zh-CN": "前台", "zh-TW": "前台", ko: "프런트" },
   };
 
   return labels[key][language];

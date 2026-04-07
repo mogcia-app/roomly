@@ -7,9 +7,11 @@ import {
 import {
   GUEST_RICH_MENU_ACTION_REQUIREMENTS,
   GUEST_RICH_MENUS_COLLECTION,
+  isGuestRichMenuActionLanguageCode,
   isGuestRichMenuActionType,
   type GuestRichMenuActionType,
 } from "@/lib/guest-contract";
+import type { GuestLanguage } from "@/lib/guest-demo";
 
 export type GuestRichMenuItem = {
   id: string;
@@ -24,6 +26,7 @@ export type GuestRichMenuItem = {
   url?: string;
   prompt?: string;
   handoffCategory?: string;
+  languageCode?: GuestLanguage;
 };
 
 export type GuestRichMenu = {
@@ -47,6 +50,7 @@ type FirestoreGuestRichMenuItem = {
   url?: unknown;
   prompt?: unknown;
   handoffCategory?: unknown;
+  languageCode?: unknown;
 };
 
 type FirestoreGuestRichMenu = {
@@ -107,6 +111,9 @@ function normalizeItem(value: unknown): GuestRichMenuItem | null {
     url: readString(item.url) ?? undefined,
     prompt: readString(item.prompt) ?? undefined,
     handoffCategory: readString(item.handoffCategory) ?? undefined,
+    languageCode: isGuestRichMenuActionLanguageCode(item.languageCode)
+      ? item.languageCode
+      : undefined,
   };
 }
 

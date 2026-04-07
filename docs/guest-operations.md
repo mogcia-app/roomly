@@ -49,11 +49,18 @@ Fixed env names:
 
 ## Supported `actionType`
 
-- `external_link`: `url` required
-- `handoff_category`: `handoffCategory` required
-- `language`: no extra fields
-- `ai_prompt`: `prompt` required
-- `human_handoff`: no extra fields
+| `actionType` | Required field | Guest behavior |
+| --- | --- | --- |
+| `external_link` | `url` | Open `url` in a new tab. No chat transition, no composer input, no auto-send. |
+| `handoff_category` | `handoffCategory` | Start the human handoff flow with `handoffCategory`, then navigate to `/guest/[roomId]/chat?mode=human`. No composer input. |
+| `language` | none | If `languageCode` exists, switch to that language immediately and return to chat. Otherwise navigate to `/guest/[roomId]/language`. |
+| `ai_prompt` | `prompt` | Treat `prompt` as the first AI chat message, post it immediately, then navigate to AI chat if needed. |
+| `human_handoff` | none | Start the human handoff flow immediately, then navigate to `/guest/[roomId]/chat?mode=human`. |
+
+`ai_prompt` and `handoff_category` are intentionally fixed contracts on the guest side:
+
+- `ai_prompt` posts the configured text immediately. It does not only fill the input box.
+- `handoff_category` immediately creates the category-based staff handoff. It does not only open a picker.
 
 ## Hearing Sheet Rules
 

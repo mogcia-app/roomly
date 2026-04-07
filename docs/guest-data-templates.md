@@ -221,11 +221,30 @@ If the document does not exist, the guest app hides the rich menu.
 
 ## Supported `actionType`
 
-- `external_link`: `url` required
-- `handoff_category`: `handoffCategory` required
-- `language`: no extra fields
-- `ai_prompt`: `prompt` required
-- `human_handoff`: no extra fields
+| `actionType` | Required field | Guest behavior |
+| --- | --- | --- |
+| `external_link` | `url` | Open `url` in a new tab. |
+| `handoff_category` | `handoffCategory` | Start the guest human handoff flow with that category and move to human chat. |
+| `language` | none | Open the language selector, or switch directly when optional `languageCode` is provided. |
+| `ai_prompt` | `prompt` | Use `prompt` as the first AI message and auto-send it immediately. |
+| `human_handoff` | none | Start staff handoff immediately and move to human chat. |
+
+Optional language shortcut example:
+
+```json
+{
+  "id": "language-en",
+  "label": "English",
+  "x": 0,
+  "y": 540,
+  "width": 600,
+  "height": 270,
+  "actionType": "language",
+  "visible": true,
+  "sortOrder": 5,
+  "languageCode": "en"
+}
+```
 
 ## Recommended Launch Minimum
 

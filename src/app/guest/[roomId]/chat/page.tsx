@@ -1,9 +1,12 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { GuestChatExperience } from "@/components/guest/GuestChatExperience";
 import {
+  getGuestLanguageLabel,
   isGuestLanguage,
+  type GuestLanguage,
 } from "@/lib/guest-demo";
 import { getGuestMessagesFromStore } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
@@ -40,6 +43,22 @@ function summarizeKnowledgeCounts(
     transport: knowledge?.transport.length ?? 0,
     nearbySpots: knowledge?.nearbySpots.length ?? 0,
   };
+}
+
+function getLanguageSettingsLabel(language: GuestLanguage) {
+  if (language === "en") {
+    return "Language";
+  }
+
+  if (language === "zh-CN") {
+    return "语言";
+  }
+
+  if (language === "ko") {
+    return "언어";
+  }
+
+  return "言語";
 }
 
 export default async function GuestChatPage({
@@ -95,6 +114,7 @@ export default async function GuestChatPage({
   }
 
   const currentMode = mode === "human" ? "human" : "ai";
+  const languageSettingsHref = `/guest/${access.accessToken}/language${debug === "1" ? "?debug=1" : ""}`;
   const debugInfo = debug === "1"
     ? {
         accessSource: access.source,
@@ -115,11 +135,11 @@ export default async function GuestChatPage({
   return (
     <div className="min-h-screen bg-[#f4f5f8]">
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#f6efe8] shadow-[0_0_0_1px_rgba(0,0,0,0.03)] lg:max-w-none lg:shadow-none">
-        <header className="relative overflow-hidden border-b border-[#e3d9d3] bg-[linear-gradient(180deg,#faf6f2_0%,#f1e8e1_100%)] text-[#171a22]">
-          <div className="relative px-4 pb-4 pt-3 lg:px-8 lg:pb-5 lg:pt-4">
-            <div className="flex items-start justify-between gap-3">
+        <header className="border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
+          <div className="px-4 py-3 lg:px-8">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-white shadow-[0_10px_24px_rgba(62,39,28,0.08)] ring-1 ring-[#ebe1dc]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-white ring-1 ring-[#efe5de]">
                   <img
                     src="/icon.png?v=2"
                     alt="Roomly icon"
@@ -129,22 +149,35 @@ export default async function GuestChatPage({
                   />
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-[15px] font-light tracking-[0.04em] text-[#171a22] lg:text-base">
+                  <div className="truncate text-[15px] font-light tracking-[0.04em] text-[#171a22]">
                     Roomly<span className="text-[#ad2218]">.</span>
                   </div>
-                  <div className="mt-0.5 truncate text-[11px] font-light text-[#8f8078] lg:text-xs">
-                    Guest Front Desk Chat
-                  </div>
                   {process.env.NODE_ENV === "production" ? (
-                    <div className="mt-2 truncate text-[13px] font-light text-[#ad2218] lg:text-sm">
+                    <div className="mt-0.5 truncate text-[12px] font-light text-[#8f8078]">
                       {room.hotelName}
                     </div>
                   ) : null}
                 </div>
               </div>
-              <div className="shrink-0" />
+              <Link
+                href={languageSettingsHref}
+                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#e4d8d1] bg-white px-3 py-2 text-[12px] font-light text-[#6f564b] transition-colors hover:bg-[#f7f1ec]"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 20 20"
+                  className="h-4 w-4 text-[#9c7b6d]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 2.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 0 0 0-15Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.9 7.5h14.2M2.9 12.5h14.2M10 2.8c1.9 1.9 3 4.5 3 7.2s-1.1 5.3-3 7.2m0-14.4C8.1 4.7 7 7.3 7 10s1.1 5.3 3 7.2" />
+                </svg>
+                <span>{getLanguageSettingsLabel(currentLanguage)}</span>
+                <span className="text-[#b49a8d]">{getGuestLanguageLabel(currentLanguage)}</span>
+              </Link>
             </div>
-
           </div>
         </header>
 

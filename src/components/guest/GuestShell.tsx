@@ -32,9 +32,6 @@ export function GuestShell({ accent = false, children }: GuestShellProps) {
             </div>
             <div>
               <div className="text-sm font-light tracking-[0.04em] text-[#171a22]">Roomly.</div>
-              <div className="text-xs font-light text-[#98a0b1]">
-                Guest Front Desk Chat
-              </div>
             </div>
           </div>
         </div>

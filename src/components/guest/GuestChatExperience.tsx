@@ -60,6 +60,22 @@ type GuestActionPanelProps = {
 };
 let optimisticMessageSequence = 0;
 
+function hasRequiredRichMenuField(action: GuestRichMenuItem) {
+  switch (action.actionType) {
+    case "external_link":
+      return Boolean(action.url);
+    case "handoff_category":
+      return Boolean(action.handoffCategory);
+    case "ai_prompt":
+      return Boolean(action.prompt);
+    case "language":
+    case "human_handoff":
+      return true;
+    default:
+      return false;
+  }
+}
+
 function getGuestLocale(language: GuestLanguage) {
   if (language === "en") {
     return "en-US";
@@ -315,7 +331,7 @@ function GuestChatInput({
 
     const requiredField = GUEST_RICH_MENU_ACTION_REQUIREMENTS[action.actionType];
 
-    if (requiredField && !action[requiredField]) {
+    if (requiredField && !hasRequiredRichMenuField(action)) {
       console.warn("[guest/rich-menu] missing action config", {
         roomId,
         actionId: action.id,

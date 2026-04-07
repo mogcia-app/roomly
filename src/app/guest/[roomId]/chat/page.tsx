@@ -110,19 +110,15 @@ export default async function GuestChatPage({
 
   const cookieStore = await cookies();
   const storedLanguage = cookieStore.get(getGuestLanguageCookieName(access.accessToken))?.value;
-  const currentLanguage = isGuestLanguage(lang)
+  const sessionLanguage = isGuestLanguage(lang)
     ? lang
     : isGuestLanguage(storedLanguage)
       ? storedLanguage
       : null;
 
-  if (!currentLanguage) {
-    redirect(`/guest/${access.accessToken}/language${debug === "1" ? "?debug=1" : ""}`);
-  }
-
   const room = await getGuestActiveStayStatusFromStore(
     access.roomId,
-    currentLanguage,
+    sessionLanguage,
     access.hotelId,
   );
 
@@ -131,10 +127,12 @@ export default async function GuestChatPage({
       roomId: access.roomId,
       source: access.source,
       hotelId: access.hotelId,
-      language: currentLanguage,
+      language: sessionLanguage,
     });
     redirect(`/guest/${access.accessToken}/unavailable${debug === "1" ? "?debug=1" : ""}`);
   }
+
+  const currentLanguage = sessionLanguage ?? room.selectedLanguage ?? "ja";
 
   const currentMode = mode === "human" ? "human" : "ai";
   const languageSettingsHref = `/guest/${access.accessToken}/language${debug === "1" ? "?debug=1" : ""}`;

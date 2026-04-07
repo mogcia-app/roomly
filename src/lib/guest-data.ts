@@ -53,6 +53,10 @@ type FirestoreStay = {
   is_active?: boolean;
   isActive?: boolean;
   language?: string;
+  guest_language?: string;
+  guestLanguage?: string;
+  translation_enabled?: boolean;
+  translationEnabled?: boolean;
   hotel_id?: string;
   hotelId?: string;
 };
@@ -139,6 +143,30 @@ function readBoolean(value: unknown): boolean | null {
   }
 
   return null;
+}
+
+function resolveStayLanguage(stay: FirestoreStay | null | undefined) {
+  const language =
+    stay?.guestLanguage ??
+    stay?.guest_language ??
+    stay?.language;
+
+  return isGuestLanguage(language) ? language : null;
+}
+
+function resolveTranslationEnabled(
+  stay: FirestoreStay | null | undefined,
+  language: GuestLanguage | null,
+) {
+  const explicit =
+    readBoolean(stay?.translationEnabled) ??
+    readBoolean(stay?.translation_enabled);
+
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  return language !== "ja";
 }
 
 function toEntryArray(value: unknown, expectedKeys: string[]): Array<Record<string, unknown>> {
@@ -695,6 +723,7 @@ function buildFallbackStayStatus(
   return {
     ...fallbackStatus,
     hotelId: resolveGuestHotelId(fallbackStatus.hotelId),
+    translationEnabled: fallbackStatus.selectedLanguage !== "ja",
   };
 }
 
@@ -714,6 +743,7 @@ export async function getGuestRoomContextFromStore(
     roomNumber: stayStatus.roomNumber,
     hotelName: stayStatus.hotelName,
     stayActive: stayStatus.stayActive,
+    translationEnabled: stayStatus.translationEnabled,
     hearingSheetPrompts: stayStatus.hearingSheetPrompts,
     hearingSheetKnowledge: stayStatus.hearingSheetKnowledge,
     roomFloor: stayStatus.roomFloor,
@@ -760,9 +790,7 @@ export async function getGuestStayStatusFromStore(
       findHearingSheetByHotelId(hotelId),
     ]);
 
-    const stayLanguage = isGuestLanguage(activeStay?.data.language)
-      ? activeStay.data.language
-      : null;
+    const stayLanguage = resolveStayLanguage(activeStay?.data);
     const hotelKnowledge = parseKnowledgeFromSource(hearingSheet);
     const roomKnowledge = parseKnowledgeFromSource(roomRecord.data);
     const knowledge = mergeKnowledge(roomKnowledge, hotelKnowledge);
@@ -799,6 +827,7 @@ export async function getGuestStayStatusFromStore(
       stayActive: Boolean(activeStay),
       hotelId,
       stayId: activeStay?.id ?? null,
+      translationEnabled: resolveTranslationEnabled(activeStay?.data, stayLanguage ?? selectedLanguage ?? "ja"),
       hearingSheetPrompts: prompts.length > 0 ? prompts : fallbackRoom?.hearingSheetPrompts ?? [],
       hearingSheetKnowledge: mergedKnowledge,
       roomFloor: toRoomFloor(roomRecord.data) ?? fallbackRoom?.roomFloor ?? null,

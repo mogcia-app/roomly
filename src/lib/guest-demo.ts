@@ -23,6 +23,7 @@ export type GuestRoomContext = {
   roomNumber?: string | null;
   hotelName: string;
   stayActive: boolean;
+  translationEnabled?: boolean;
   hearingSheetPrompts: string[];
   hearingSheetKnowledge?: HearingSheetKnowledge;
   hotelId?: string | null;

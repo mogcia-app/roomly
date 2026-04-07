@@ -4,12 +4,14 @@ import {
   postGuestAiStarterToStore,
   postGuestMessageToStore,
 } from "@/lib/guest-chat-data";
+import { isGuestLanguage } from "@/lib/guest-demo";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
 
 type GuestMessagePayload = {
   body?: string;
+  guestLanguage?: string;
   mode?: "ai" | "human";
   kind?: "guest_message" | "ai_starter";
 };
@@ -40,9 +42,12 @@ export async function POST(
     }
 
     const storedLanguage = await getStoredGuestLanguage(access.accessToken);
+    const requestedLanguage = isGuestLanguage(payload.guestLanguage)
+      ? payload.guestLanguage
+      : null;
     const stayStatus = await getGuestActiveStayStatusFromStore(
       access.roomId,
-      storedLanguage,
+      storedLanguage ?? requestedLanguage,
       access.hotelId,
     );
 

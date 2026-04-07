@@ -42,5 +42,15 @@ export async function GET(
     );
   }
 
-  return Response.json(stayStatus);
+  return Response.json({
+    ...stayStatus,
+    available: true,
+    guestLanguage: stayStatus.selectedLanguage ?? "ja",
+    translationEnabled: stayStatus.translationEnabled ?? (stayStatus.selectedLanguage !== "ja"),
+    room: {
+      roomId: stayStatus.roomId,
+      roomNumber: stayStatus.roomNumber ?? null,
+      displayName: stayStatus.roomDisplayName ?? stayStatus.roomLabel,
+    },
+  });
 }

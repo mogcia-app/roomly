@@ -601,7 +601,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "Please connect me to the front desk.",
       handoffWaiting: "The front desk has been notified. Please wait for a reply.",
-      frontDeskFallback: "Please check with the front desk.",
+      frontDeskFallback: "The AI cannot confirm this. Please use \"Delivery / Request\" below to send it to the front desk or switch to staff support.",
+      handoffGuidance: "If you want the front desk to check this, use \"Delivery / Request\" below to send your request. Staff support can take over from there.",
       emergencyFallback: "Emergency contact information is not registered. Please contact the front desk immediately.",
     };
   }
@@ -610,7 +611,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "请帮我联系前台。",
       handoffWaiting: "已通知前台，请等待回复。",
-      frontDeskFallback: "请向前台确认。",
+      frontDeskFallback: "此内容 AI 无法确认。请使用下方的“送达 / 请求”发送给前台，或切换为人工处理。",
+      handoffGuidance: "如果您想让前台帮您确认，请使用下方的“送达 / 请求”发送需求，之后可切换为人工处理。",
       emergencyFallback: "未找到已登记的紧急联系方式，请立即联系前台。",
     };
   }
@@ -619,7 +621,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "請幫我聯繫前台。",
       handoffWaiting: "已通知前台，請等待回覆。",
-      frontDeskFallback: "請向前台確認。",
+      frontDeskFallback: "此內容 AI 無法確認。請使用下方的「送達 / 請求」發送給前台，或切換為人工處理。",
+      handoffGuidance: "如果您想請前台幫您確認，請使用下方的「送達 / 請求」送出需求，之後可切換為人工處理。",
       emergencyFallback: "未找到已登記的緊急聯絡方式，請立即聯絡前台。",
     };
   }
@@ -628,7 +631,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "프런트로 연결해 주세요.",
       handoffWaiting: "프런트에 알렸습니다. 답변을 기다려 주세요.",
-      frontDeskFallback: "프런트로 확인해 주세요.",
+      frontDeskFallback: "이 내용은 AI가 확인할 수 없습니다. 아래의 \"배달 / 요청\"으로 프런트에 보내거나 직원 대응으로 전환해 주세요.",
+      handoffGuidance: "프런트에 확인을 맡기려면 아래의 \"배달 / 요청\"으로 내용을 보내 주세요. 이후 직원 대응으로 이어갈 수 있습니다.",
       emergencyFallback: "등록된 긴급 연락처를 찾지 못했습니다. 즉시 프런트로 문의해 주세요.",
     };
   }
@@ -636,7 +640,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
   return {
     handoffRequest: "フロント対応をお願いします。",
     handoffWaiting: "フロントへ通知しました。返信をお待ちください。",
-    frontDeskFallback: "フロントへご確認ください。",
+    frontDeskFallback: "この内容はAIでは確認できません。下の「お届け・ご依頼」からフロントへ送るか、有人対応へ切り替えてください。",
+    handoffGuidance: "フロントに確認したい場合は、下の「お届け・ご依頼」から内容を送ってください。必要ならそのままスタッフ対応へつなげられます。",
     emergencyFallback:
       "登録済みの緊急連絡先が見つかりません。すぐにフロントへご確認ください。",
   };
@@ -648,6 +653,36 @@ function includesAny(text: string, values: string[]) {
 
 function normalizeText(value: string) {
   return value.toLowerCase().replace(/[\s　。、，,!?？!:\-_/\\()[\]{}"'`]+/g, "");
+}
+
+function isFrontDeskHandoffIntent(body: string, normalizedBody: string) {
+  const asksToContactFrontDesk =
+    body.includes("確認") ||
+    body.includes("連絡") ||
+    body.includes("聞いて") ||
+    body.includes("問い合わせ") ||
+    body.includes("つないで") ||
+    body.includes("繋いで") ||
+    body.includes("代わりに") ||
+    body.includes("帮我") ||
+    body.includes("聯繫") ||
+    body.includes("联系") ||
+    body.includes("确认") ||
+    body.includes("確認") ||
+    body.includes("연락") ||
+    body.includes("확인") ||
+    body.includes("연결");
+
+  const mentionsFrontDesk =
+    normalizedBody.includes("フロント") ||
+    normalizedBody.includes("前台") ||
+    normalizedBody.includes("staff") ||
+    normalizedBody.includes("frontdesk") ||
+    normalizedBody.includes("スタッフ") ||
+    normalizedBody.includes("직원") ||
+    normalizedBody.includes("프런트");
+
+  return asksToContactFrontDesk && mentionsFrontDesk;
 }
 
 function buildCharacterNgrams(value: string, size = 2) {
@@ -1165,6 +1200,10 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
   const faq = findBestFaq(stayStatus, body);
   if (faq?.answer) {
     return faq.answer;
+  }
+
+  if (isFrontDeskHandoffIntent(body, normalizedBody)) {
+    return copy.handoffGuidance;
   }
 
   if (

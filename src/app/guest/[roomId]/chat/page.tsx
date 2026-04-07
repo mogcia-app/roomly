@@ -205,6 +205,7 @@ export default async function GuestChatPage({
         <GuestChatExperience
           key={`${currentMode}:${thread.at(-1)?.id ?? "empty"}:${thread.length}`}
           roomId={access.accessToken}
+          hotelName={room.hotelName}
           roomLabel={room.roomLabel}
           richMenu={richMenu}
           language={currentLanguage}

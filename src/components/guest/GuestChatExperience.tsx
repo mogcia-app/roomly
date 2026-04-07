@@ -31,6 +31,7 @@ type GuestChatExperienceProps = {
     knowledgeCounts: Record<string, number>;
   } | null;
   roomId: string;
+  hotelName?: string | null;
   roomLabel: string;
   richMenu: GuestRichMenu | null;
   language: GuestLanguage;
@@ -124,15 +125,9 @@ function formatTimeLabel(timestamp: string | null, language: GuestLanguage) {
   }).format(new Date(timestamp));
 }
 
-function senderLabel(sender: GuestMessage["sender"], language: GuestLanguage) {
-  const ui = getGuestUiCopy(language);
-
-  if (sender === "ai") {
-    return ui.aiLabel;
-  }
-
-  if (sender === "front") {
-    return ui.frontLabel;
+function senderLabel(sender: GuestMessage["sender"], hotelName?: string | null) {
+  if ((sender === "ai" || sender === "front") && hotelName?.trim()) {
+    return hotelName.trim();
   }
 
   return "";
@@ -858,6 +853,7 @@ function HumanStarter({ language }: { language: GuestLanguage }) {
 export function GuestChatExperience({
   debugInfo,
   roomId,
+  hotelName,
   roomLabel,
   richMenu,
   language,
@@ -986,7 +982,7 @@ export function GuestChatExperience({
                       </div>
                       <div className="max-w-[88%] lg:max-w-[52%] xl:max-w-[46%]">
                         <div className="mb-1 ml-1 text-[11px] font-light text-[#8b776e] lg:text-[10px]">
-                          {senderLabel(message.sender, language)}
+                          {senderLabel(message.sender, hotelName)}
                         </div>
                         <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_14px_28px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
                           {message.body}

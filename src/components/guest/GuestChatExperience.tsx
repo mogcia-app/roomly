@@ -58,6 +58,7 @@ type GuestActionPanelProps = {
   roomLabel?: string;
   language: GuestLanguage;
   knowledge?: HearingSheetKnowledge | null;
+  richMenu?: GuestRichMenu | null;
   prompts: string[];
   showIntro?: boolean;
   onOptimisticSend: (message: DisplayMessage) => void;
@@ -72,6 +73,8 @@ function hasRequiredRichMenuField(action: GuestRichMenuItem) {
       return Boolean(action.handoffCategory);
     case "ai_prompt":
       return Boolean(action.prompt);
+    case "ai_message":
+      return Boolean(action.messageText || action.messageImageUrl);
     case "language":
     case "human_handoff":
       return true;
@@ -123,6 +126,30 @@ function formatTimeLabel(timestamp: string | null, language: GuestLanguage) {
     minute: "2-digit",
     timeZone: "Asia/Tokyo",
   }).format(new Date(timestamp));
+}
+
+function formatMessageBody(body: string) {
+  return body
+    .replace(/ご利用日\s*時/g, "ご利用日時")
+    .replace(/([^\n])\s*・/g, "$1\n・")
+    .replace(/を記載して\s*ください/g, "を記載してください");
+}
+
+function renderMessageBody(message: DisplayMessage) {
+  return (
+    <div className="space-y-3">
+      {message.imageUrl ? (
+        <img
+          src={message.imageUrl}
+          alt={message.imageAlt ?? ""}
+          className="w-full rounded-[18px] object-cover"
+        />
+      ) : null}
+      {message.body ? (
+        <div className="whitespace-pre-line">{formatMessageBody(message.body)}</div>
+      ) : null}
+    </div>
+  );
 }
 
 function senderLabel(sender: GuestMessage["sender"], hotelName?: string | null) {
@@ -195,6 +222,26 @@ function createOptimisticMessage(
   };
 }
 
+function createOptimisticRichMessage(
+  prefix: string,
+  sender: GuestMessage["sender"],
+  body: string,
+  imageUrl?: string,
+  imageAlt?: string,
+): DisplayMessage {
+  optimisticMessageSequence += 1;
+
+  return {
+    id: `${prefix}-${optimisticMessageSequence}`,
+    sender,
+    body,
+    imageUrl: imageUrl ?? null,
+    imageAlt: imageAlt ?? null,
+    timestamp: new Date().toISOString(),
+    optimistic: true,
+  };
+}
+
 function getGuestActionCopy(language: GuestLanguage) {
   if (language === "en") {
     return {
@@ -233,6 +280,48 @@ function getGuestActionCopy(language: GuestLanguage) {
     aiPrompt: "何についてお困りですか？下にはホテルに登録されている案内項目だけを表示しています。",
     aiEmpty: "AIで案内できる登録項目がまだありません。直接入力するか、フロントへご依頼ください。",
   };
+}
+
+function buildRichMenuGuideText(
+  language: GuestLanguage,
+  richMenu: GuestRichMenu | null | undefined,
+) {
+  if (!richMenu) {
+    return null;
+  }
+
+  if (richMenu.menuGuideText) {
+    return richMenu.menuGuideText;
+  }
+
+  const labels = richMenu.items
+    .map((item) => item.label?.trim())
+    .filter((label): label is string => Boolean(label))
+    .slice(0, 4);
+
+  if (labels.length === 0) {
+    return null;
+  }
+
+  const joined = labels.join(" / ");
+
+  if (language === "en") {
+    return `You can also open the quick menu below for ${joined}.`;
+  }
+
+  if (language === "zh-CN") {
+    return `下方快捷菜单中也可以查看 ${joined}。`;
+  }
+
+  if (language === "zh-TW") {
+    return `下方快捷選單中也可以查看 ${joined}。`;
+  }
+
+  if (language === "ko") {
+    return `아래 퀵 메뉴에서도 ${joined} 항목을 열 수 있습니다.`;
+  }
+
+  return `下のクイックメニューからも ${joined} を開けます。`;
 }
 
 type AiGuideOption = {
@@ -383,6 +472,31 @@ function GuestChatInput({
     };
   }
 
+  async function postAiDisplayMessage(body?: string, imageUrl?: string, imageAlt?: string) {
+    const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        body,
+        imageUrl,
+        imageAlt,
+        mode: "ai",
+        kind: "ai_message",
+      }),
+    });
+
+    const payload = response.ok
+      ? await response.json() as { threadId?: string }
+      : null;
+
+    return {
+      ok: response.ok,
+      threadId: payload?.threadId ?? null,
+    };
+  }
+
   async function postHumanHandoff(category?: string) {
     return fetch(`/api/guest/rooms/${roomId}/handoff`, {
       method: "POST",
@@ -481,6 +595,36 @@ function GuestChatInput({
             `/guest/${roomId}/chat?mode=ai${response.threadId ? `&thread=${encodeURIComponent(response.threadId)}` : ""}`,
           );
         }
+      });
+      return;
+    }
+
+    if (action.actionType === "ai_message" && (action.messageText || action.messageImageUrl)) {
+      onOptimisticSend(
+        createOptimisticRichMessage(
+          "rich-ai-message",
+          "ai",
+          action.messageText ?? "",
+          action.messageImageUrl,
+          action.messageImageAlt,
+        ),
+      );
+
+      const response = await postAiDisplayMessage(
+        action.messageText,
+        action.messageImageUrl,
+        action.messageImageAlt,
+      );
+
+      if (!response.ok) {
+        setError(ui.messageSendError);
+        return;
+      }
+
+      startTransition(() => {
+        router.push(
+          `/guest/${roomId}/chat?mode=ai${response.threadId ? `&thread=${encodeURIComponent(response.threadId)}` : ""}`,
+        );
       });
       return;
     }
@@ -661,6 +805,7 @@ function GuestActionPanel({
   roomLabel,
   language,
   knowledge,
+  richMenu,
   prompts,
   showIntro = false,
   onOptimisticSend,
@@ -669,6 +814,7 @@ function GuestActionPanel({
   const ui = getGuestUiCopy(language);
   const actionCopy = getGuestActionCopy(language);
   const aiGuideOptions = buildAiGuideOptions(language, knowledge, prompts);
+  const richMenuGuideText = buildRichMenuGuideText(language, richMenu);
   const [isRequestOptionsOpen, setIsRequestOptionsOpen] = useState(false);
   const [isAiOptionsOpen, setIsAiOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -743,6 +889,11 @@ function GuestActionPanel({
             {showIntro && roomLabel ? `${roomLabel}様\n` : ""}
             {showIntro ? ui.introMessage : actionCopy.helperBody}
           </div>
+          {richMenuGuideText ? (
+            <div className="mt-3 rounded-[16px] border border-[#ebe1dc] bg-[#f7f1ec] px-3 py-2 text-[12px] font-light leading-5 text-[#7a6056]">
+              {richMenuGuideText}
+            </div>
+          ) : null}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -916,6 +1067,7 @@ export function GuestChatExperience({
             roomLabel={roomLabel}
             language={language}
             knowledge={knowledge}
+            richMenu={richMenu}
             prompts={prompts}
             showIntro
             onOptimisticSend={(message) => {
@@ -945,7 +1097,7 @@ export function GuestChatExperience({
                   {isGuest ? (
                     <div className="max-w-[86%] lg:max-w-[48%] xl:max-w-[42%]">
                       <div className="rounded-[24px] rounded-br-md bg-[#06c755] px-4 py-3 text-sm leading-6 text-white shadow-[0_14px_28px_rgba(6,199,85,0.18)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                        {message.body}
+                        {renderMessageBody(message)}
                       </div>
                       <div className="mt-1 flex justify-end text-[11px] text-[#8b776e] lg:text-[10px]">
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
@@ -957,7 +1109,7 @@ export function GuestChatExperience({
                   ) : isSystem ? (
                     <div className="max-w-[88%] lg:max-w-[52%] xl:max-w-[46%]">
                       <div className="rounded-[24px] bg-white px-4 py-3 text-sm leading-6 text-[#8d4d47] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                        {message.body}
+                        {renderMessageBody(message)}
                       </div>
                       <div className="mt-1 flex justify-start text-[11px] text-[#8b776e] lg:text-[10px]">
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
@@ -985,7 +1137,7 @@ export function GuestChatExperience({
                           {senderLabel(message.sender, hotelName)}
                         </div>
                         <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_14px_28px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                          {message.body}
+                          {renderMessageBody(message)}
                         </div>
                         <div className="mt-1 flex justify-start text-[11px] text-[#8b776e] lg:text-[10px]">
                           <span>{formatTimeLabel(message.timestamp, language)}</span>
@@ -1002,6 +1154,7 @@ export function GuestChatExperience({
               roomId={roomId}
               language={language}
               knowledge={knowledge}
+              richMenu={richMenu}
               prompts={prompts}
               onOptimisticSend={(message) => {
                 setOptimisticMessages((current) => [...current, message]);

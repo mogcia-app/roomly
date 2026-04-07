@@ -110,7 +110,7 @@ export default async function GuestEntryPage({
   return (
     <GuestShell accent>
       <main className="flex flex-1 flex-col justify-center px-5 py-6">
-        <section className="rounded-[32px] border border-[#eaded9] bg-[linear-gradient(180deg,#fffdfb_0%,#faf5f1_100%)] p-6 shadow-[0_20px_80px_rgba(90,59,41,0.1)]">
+        <section className="rounded-[32px] border border-[#e7ddd8] bg-[#fffaf7] p-6 shadow-[0_20px_60px_rgba(72,47,35,0.08)]">
           <p className="text-xs font-light uppercase tracking-[0.3em] text-[#ad2218]">
             {copy.eyebrow}
           </p>

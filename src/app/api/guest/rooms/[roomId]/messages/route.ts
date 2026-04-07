@@ -1,6 +1,7 @@
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import {
+  postGuestAiMessageToStore,
   postGuestAiStarterToStore,
   postGuestMessageToStore,
 } from "@/lib/guest-chat-data";
@@ -12,8 +13,10 @@ export const runtime = "nodejs";
 type GuestMessagePayload = {
   body?: string;
   guestLanguage?: string;
+  imageAlt?: string;
+  imageUrl?: string;
   mode?: "ai" | "human";
-  kind?: "guest_message" | "ai_starter";
+  kind?: "guest_message" | "ai_starter" | "ai_message";
 };
 
 export async function POST(
@@ -24,7 +27,7 @@ export async function POST(
     const { roomId: accessToken } = await context.params;
     const payload = (await request.json()) as GuestMessagePayload;
 
-    if (!payload.body?.trim()) {
+    if (!payload.body?.trim() && !payload.imageUrl?.trim()) {
       return Response.json({ error: "EMPTY_MESSAGE" }, { status: 400 });
     }
 
@@ -56,8 +59,15 @@ export async function POST(
     }
 
     const result = payload.kind === "ai_starter"
-      ? await postGuestAiStarterToStore(stayStatus, payload.body)
-      : await postGuestMessageToStore(stayStatus, mode, payload.body);
+      ? await postGuestAiStarterToStore(stayStatus, payload.body ?? "")
+      : payload.kind === "ai_message"
+        ? await postGuestAiMessageToStore(
+            stayStatus,
+            payload.body,
+            payload.imageUrl,
+            payload.imageAlt,
+          )
+        : await postGuestMessageToStore(stayStatus, mode, payload.body ?? "");
 
     if (!result.ok) {
       return Response.json({ error: result.error }, { status: 400 });

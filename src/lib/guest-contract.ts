@@ -19,6 +19,7 @@ export const GUEST_RICH_MENU_ACTION_TYPES = [
   "external_link",
   "handoff_category",
   "language",
+  "ai_message",
   "ai_prompt",
   "human_handoff",
 ] as const;
@@ -30,7 +31,9 @@ export type GuestRichMenuActionField =
   | "url"
   | "handoffCategory"
   | "prompt"
-  | "languageCode";
+  | "languageCode"
+  | "messageText"
+  | "messageImageUrl";
 
 export type GuestRichMenuActionSpec = {
   requiredField: GuestRichMenuActionField | null;
@@ -74,6 +77,14 @@ export const GUEST_RICH_MENU_ACTION_SPECS: Record<
     composerBehavior: "none",
     description:
       "Start the AI conversation with the configured prompt as an AI message.",
+  },
+  ai_message: {
+    requiredField: null,
+    opensExternalUrl: false,
+    navigationTarget: "chat_ai",
+    composerBehavior: "none",
+    description:
+      "Show a configured AI-side message with optional image in the chat.",
   },
   human_handoff: {
     requiredField: null,

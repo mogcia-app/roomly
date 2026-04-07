@@ -25,6 +25,9 @@ export type GuestRichMenuItem = {
   sortOrder: number;
   url?: string;
   prompt?: string;
+  messageText?: string;
+  messageImageUrl?: string;
+  messageImageAlt?: string;
   handoffCategory?: string;
   languageCode?: GuestLanguage;
 };
@@ -34,6 +37,7 @@ export type GuestRichMenu = {
   imageUrl: string;
   imageWidth: number;
   imageHeight: number;
+  menuGuideText?: string;
   items: GuestRichMenuItem[];
 };
 
@@ -49,6 +53,9 @@ type FirestoreGuestRichMenuItem = {
   sortOrder?: unknown;
   url?: unknown;
   prompt?: unknown;
+  messageText?: unknown;
+  messageImageUrl?: unknown;
+  messageImageAlt?: unknown;
   handoffCategory?: unknown;
   languageCode?: unknown;
 };
@@ -58,6 +65,7 @@ type FirestoreGuestRichMenu = {
   imageUrl?: unknown;
   imageWidth?: unknown;
   imageHeight?: unknown;
+  menuGuideText?: unknown;
   items?: unknown;
 };
 
@@ -98,6 +106,14 @@ function normalizeItem(value: unknown): GuestRichMenuItem | null {
     return null;
   }
 
+  if (
+    item.actionType === "ai_message" &&
+    !readString(item.messageText) &&
+    !readString(item.messageImageUrl)
+  ) {
+    return null;
+  }
+
   return {
     id,
     label,
@@ -110,6 +126,9 @@ function normalizeItem(value: unknown): GuestRichMenuItem | null {
     sortOrder,
     url: readString(item.url) ?? undefined,
     prompt: readString(item.prompt) ?? undefined,
+    messageText: readString(item.messageText) ?? undefined,
+    messageImageUrl: readString(item.messageImageUrl) ?? undefined,
+    messageImageAlt: readString(item.messageImageAlt) ?? undefined,
     handoffCategory: readString(item.handoffCategory) ?? undefined,
     languageCode: isGuestRichMenuActionLanguageCode(item.languageCode)
       ? item.languageCode
@@ -146,6 +165,7 @@ function normalizeGuestRichMenu(value: FirestoreGuestRichMenu | null): GuestRich
     imageUrl,
     imageWidth,
     imageHeight,
+    menuGuideText: readString(value.menuGuideText) ?? undefined,
     items,
   };
 }

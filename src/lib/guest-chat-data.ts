@@ -57,6 +57,8 @@ type FirestoreMessage = {
   threadId?: string;
   sender?: "guest" | "front" | "ai" | "system";
   body?: string;
+  image_url?: string | null;
+  image_alt?: string | null;
   original_body?: string;
   original_language?: string | null;
   translated_body_front?: string | null;
@@ -70,6 +72,8 @@ type FirestoreMessage = {
 type StructuredKnowledge = NonNullable<GuestStayStatus["hearingSheetKnowledge"]>;
 type TranslationPayload = {
   body: string;
+  imageUrl?: string | null;
+  imageAlt?: string | null;
   originalBody: string;
   originalLanguage: string | null;
   translatedBodyFront: string | null;
@@ -324,7 +328,7 @@ function normalizeMessage(
   id: string,
   message: FirestoreMessage,
 ): GuestMessage | null {
-  if (!message.body || !message.sender) {
+  if ((!message.body && !message.image_url) || !message.sender) {
     return null;
   }
 
@@ -339,7 +343,9 @@ function normalizeMessage(
   return {
     id,
     sender: message.sender,
-    body: message.body,
+    body: message.body ?? "",
+    imageUrl: message.image_url ?? null,
+    imageAlt: message.image_alt ?? null,
     timestamp,
     originalBody: message.original_body ?? null,
     originalLanguage: message.original_language ?? null,
@@ -360,6 +366,8 @@ async function addMessage(
     thread_id: threadId,
     sender,
     body: payload.body,
+    image_url: payload.imageUrl ?? null,
+    image_alt: payload.imageAlt ?? null,
     original_body: payload.originalBody,
     original_language: payload.originalLanguage,
     translated_body_front: payload.translatedBodyFront,
@@ -1568,6 +1576,53 @@ export async function postGuestAiStarterToStore(
   );
 
   await updateAiThreadMetadata(threadId, stayStatus, trimmedBody, "ai");
+
+  return { ok: true as const, threadId };
+}
+
+export async function postGuestAiMessageToStore(
+  stayStatus: GuestStayStatus,
+  body?: string,
+  imageUrl?: string,
+  imageAlt?: string,
+) {
+  const trimmedBody = body?.trim() ?? "";
+  const trimmedImageUrl = imageUrl?.trim() ?? "";
+  const trimmedImageAlt = imageAlt?.trim() ?? "";
+
+  if (!trimmedBody && !trimmedImageUrl) {
+    return { ok: false as const, error: "EMPTY_AI_MESSAGE" };
+  }
+
+  if (!hasFirebaseAdminCredentials()) {
+    return { ok: true as const, threadId: "demo-ai" };
+  }
+
+  const threadId = await ensureThread(stayStatus, "ai");
+
+  await addMessage(
+    threadId,
+    "ai",
+    {
+      body: trimmedBody,
+      imageUrl: trimmedImageUrl || null,
+      imageAlt: trimmedImageAlt || null,
+      originalBody: trimmedBody,
+      originalLanguage: toLanguageCode(stayStatus.selectedLanguage),
+      translatedBodyFront: trimmedBody || null,
+      translatedLanguageFront: GUEST_FRONT_DESK_LANGUAGE,
+      translatedBodyGuest: trimmedBody || null,
+      translatedLanguageGuest: toLanguageCode(stayStatus.selectedLanguage),
+      translationState: "not_required",
+    },
+  );
+
+  await updateAiThreadMetadata(
+    threadId,
+    stayStatus,
+    trimmedBody || trimmedImageAlt || "AI message",
+    "ai",
+  );
 
   return { ok: true as const, threadId };
 }

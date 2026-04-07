@@ -59,7 +59,7 @@ export function GuestLanguageForm({
   }
 
   return (
-    <div className="border border-[#e7ddd8] bg-[linear-gradient(180deg,#fffdfb_0%,#faf5f1_100%)] px-6 py-7 shadow-[0_22px_50px_rgba(62,39,28,0.08)]">
+    <div className="border border-[#e7ddd8] bg-[#fffaf7] px-6 py-7 shadow-[0_20px_60px_rgba(72,47,35,0.08)]">
       <div className="border-b border-[#ebe1dc] pb-6 text-center">
         {showHotelName ? (
           <p className="mt-4 text-[10px] font-light uppercase tracking-[0.26em] text-[#ad2218]">

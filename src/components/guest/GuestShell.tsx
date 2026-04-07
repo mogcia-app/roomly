@@ -7,21 +7,21 @@ type GuestShellProps = {
 
 export function GuestShell({ accent = false, children }: GuestShellProps) {
   return (
-    <div className="min-h-screen bg-[#f4f5f8] text-[#171a22]">
+    <div className="min-h-screen bg-[#f6efe8] text-[#171a22]">
       <div
-        className={`mx-auto flex min-h-screen w-full max-w-md flex-col bg-white px-0 shadow-[0_30px_80px_rgba(32,42,67,0.10)] md:my-6 md:min-h-[calc(100vh-3rem)] ${
+        className={`mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#fbf7f3] px-0 shadow-[0_30px_80px_rgba(72,47,35,0.10)] md:my-6 md:min-h-[calc(100vh-3rem)] ${
           accent ? "rounded-none md:rounded-[24px]" : "rounded-none md:rounded-[38px]"
         }`}
       >
         <div
           className={`px-5 py-4 ${
             accent
-              ? "border-b border-[#ebe1dc] bg-white text-[#171a22]"
-              : "border-b border-[#eef0f5] bg-white text-[#171a22]"
+              ? "border-b border-[#eadfd8] bg-[#fbf7f3] text-[#171a22]"
+              : "border-b border-[#eadfd8] bg-[#fbf7f3] text-[#171a22]"
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[15px] bg-white ring-1 ring-[#eef0f5]">
+            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[15px] bg-white ring-1 ring-[#efe5de]">
               <img
                 src="/icon.png?v=2"
                 alt="Roomly icon"

@@ -203,6 +203,7 @@ export default async function GuestChatPage({
           richMenu={richMenu}
           language={currentLanguage}
           mode={currentMode}
+          knowledge={room.hearingSheetKnowledge}
           prompts={room.hearingSheetPrompts}
           initialMessages={thread}
           debugInfo={debugInfo}

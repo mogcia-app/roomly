@@ -10,6 +10,7 @@ import {
 } from "@/lib/guest-contract";
 import {
   getGuestUiCopy,
+  type HearingSheetKnowledge,
   type GuestLanguage,
   type GuestMessage,
 } from "@/lib/guest-demo";
@@ -34,6 +35,7 @@ type GuestChatExperienceProps = {
   richMenu: GuestRichMenu | null;
   language: GuestLanguage;
   mode: "ai" | "human";
+  knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
   initialMessages: GuestMessage[];
 };
@@ -54,6 +56,7 @@ type GuestActionPanelProps = {
   roomId: string;
   roomLabel?: string;
   language: GuestLanguage;
+  knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
   showIntro?: boolean;
   onOptimisticSend: (message: DisplayMessage) => void;
@@ -217,6 +220,104 @@ function getGuestActionCopy(language: GuestLanguage) {
     aiPrompt: "何についてお困りですか？下にはホテルに登録されている案内項目だけを表示しています。",
     aiEmpty: "AIで案内できる登録項目がまだありません。直接入力するか、フロントへご依頼ください。",
   };
+}
+
+type AiGuideOption = {
+  key: string;
+  label: string;
+  prompt: string;
+};
+
+function getAiGuideLabel(language: GuestLanguage, key: AiGuideOption["key"]) {
+  const labels: Record<AiGuideOption["key"], Record<GuestLanguage, string>> = {
+    wifi: { ja: "Wi-Fi", en: "Wi-Fi", "zh-CN": "Wi-Fi", ko: "Wi-Fi" },
+    breakfast: { ja: "朝食", en: "Breakfast", "zh-CN": "早餐", ko: "조식" },
+    bath: { ja: "大浴場", en: "Bath", "zh-CN": "浴场", ko: "대욕장" },
+    facility: { ja: "館内施設", en: "Facilities", "zh-CN": "馆内设施", ko: "시설" },
+    amenity: { ja: "アメニティ", en: "Amenities", "zh-CN": "备品", ko: "어메니티" },
+    parking: { ja: "駐車場", en: "Parking", "zh-CN": "停车场", ko: "주차장" },
+    checkout: { ja: "チェックアウト", en: "Checkout", "zh-CN": "退房", ko: "체크아웃" },
+    emergency: { ja: "緊急時", en: "Emergency", "zh-CN": "紧急情况", ko: "긴급" },
+    roomService: { ja: "ルームサービス", en: "Room service", "zh-CN": "客房服务", ko: "룸서비스" },
+    transport: { ja: "交通案内", en: "Transport", "zh-CN": "交通", ko: "교통" },
+    nearby: { ja: "周辺案内", en: "Nearby spots", "zh-CN": "周边信息", ko: "주변 안내" },
+    frontDesk: { ja: "フロント対応", en: "Front desk", "zh-CN": "前台", ko: "프런트" },
+  };
+
+  return labels[key][language];
+}
+
+function buildAiGuideOptions(
+  language: GuestLanguage,
+  knowledge: HearingSheetKnowledge | null | undefined,
+  prompts: string[],
+) {
+  const options: AiGuideOption[] = [];
+
+  if (knowledge?.wifi.length) {
+    options.push({ key: "wifi", label: getAiGuideLabel(language, "wifi"), prompt: "Wi-Fiについて教えてください。" });
+  }
+
+  if (knowledge?.breakfast.length) {
+    options.push({ key: "breakfast", label: getAiGuideLabel(language, "breakfast"), prompt: "朝食について教えてください。" });
+  }
+
+  if (knowledge?.baths.length) {
+    options.push({
+      key: "bath",
+      label: getAiGuideLabel(language, "bath"),
+      prompt: `${knowledge.baths[0]?.name ?? "大浴場"}について教えてください。`,
+    });
+  }
+
+  if ((knowledge?.facilities.length ?? 0) > 0 || (knowledge?.facilityLocations.length ?? 0) > 0) {
+    options.push({ key: "facility", label: getAiGuideLabel(language, "facility"), prompt: "館内施設について教えてください。" });
+  }
+
+  if (knowledge?.amenities.length) {
+    options.push({ key: "amenity", label: getAiGuideLabel(language, "amenity"), prompt: "アメニティについて教えてください。" });
+  }
+
+  if (knowledge?.parking.length) {
+    options.push({ key: "parking", label: getAiGuideLabel(language, "parking"), prompt: "駐車場について教えてください。" });
+  }
+
+  if (knowledge?.checkout.length) {
+    options.push({ key: "checkout", label: getAiGuideLabel(language, "checkout"), prompt: "チェックアウトについて教えてください。" });
+  }
+
+  if (knowledge?.emergency.length) {
+    options.push({ key: "emergency", label: getAiGuideLabel(language, "emergency"), prompt: "緊急時の案内を教えてください。" });
+  }
+
+  if (knowledge?.roomService.length) {
+    options.push({ key: "roomService", label: getAiGuideLabel(language, "roomService"), prompt: "ルームサービスについて教えてください。" });
+  }
+
+  if (knowledge?.transport.length) {
+    options.push({ key: "transport", label: getAiGuideLabel(language, "transport"), prompt: "交通案内を教えてください。" });
+  }
+
+  if (knowledge?.nearbySpots.length) {
+    options.push({ key: "nearby", label: getAiGuideLabel(language, "nearby"), prompt: "周辺案内を教えてください。" });
+  }
+
+  if (knowledge?.frontDeskHours.length) {
+    options.push({ key: "frontDesk", label: getAiGuideLabel(language, "frontDesk"), prompt: "フロントの対応時間を教えてください。" });
+  }
+
+  const existingPrompts = new Set(options.map((option) => option.prompt));
+
+  return [
+    ...options,
+    ...prompts
+      .filter((prompt) => !existingPrompts.has(prompt))
+      .map((prompt) => ({
+        key: `prompt:${prompt}`,
+        label: prompt,
+        prompt,
+      })),
+  ];
 }
 
 function GuestChatInput({
@@ -546,6 +647,7 @@ function GuestActionPanel({
   roomId,
   roomLabel,
   language,
+  knowledge,
   prompts,
   showIntro = false,
   onOptimisticSend,
@@ -553,6 +655,7 @@ function GuestActionPanel({
   const router = useRouter();
   const ui = getGuestUiCopy(language);
   const actionCopy = getGuestActionCopy(language);
+  const aiGuideOptions = buildAiGuideOptions(language, knowledge, prompts);
   const [isRequestOptionsOpen, setIsRequestOptionsOpen] = useState(false);
   const [isAiOptionsOpen, setIsAiOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -664,22 +767,22 @@ function GuestActionPanel({
           {isAiOptionsOpen ? (
             <div className="mt-2 rounded-[18px] border border-[#ebe1dc] bg-[#fffaf7] px-3 py-3">
               <div className="mb-2 text-[12px] font-light leading-5 text-[#7a554a]">
-                {prompts.length > 0 ? actionCopy.aiPrompt : actionCopy.aiEmpty}
+                {aiGuideOptions.length > 0 ? actionCopy.aiPrompt : actionCopy.aiEmpty}
               </div>
-              {prompts.length > 0 ? (
+              {aiGuideOptions.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {prompts.map((prompt) => (
+                  {aiGuideOptions.map((option) => (
                     <button
-                      key={prompt}
+                      key={option.key}
                       type="button"
                       disabled={isPending}
                       onClick={() => {
-                        void submitAiPrompt(prompt);
+                        void submitAiPrompt(option.prompt);
                         setIsAiOptionsOpen(false);
                       }}
                       className="rounded-full border border-[#e7ddd8] bg-white px-3 py-1.5 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
                     >
-                      {prompt}
+                      {option.label}
                     </button>
                   ))}
                 </div>
@@ -741,6 +844,7 @@ export function GuestChatExperience({
   richMenu,
   language,
   mode,
+  knowledge,
   prompts,
   initialMessages,
 }: GuestChatExperienceProps) {
@@ -797,6 +901,7 @@ export function GuestChatExperience({
             roomId={roomId}
             roomLabel={roomLabel}
             language={language}
+            knowledge={knowledge}
             prompts={prompts}
             showIntro
             onOptimisticSend={(message) => {
@@ -882,6 +987,7 @@ export function GuestChatExperience({
             <GuestActionPanel
               roomId={roomId}
               language={language}
+              knowledge={knowledge}
               prompts={prompts}
               onOptimisticSend={(message) => {
                 setOptimisticMessages((current) => [...current, message]);

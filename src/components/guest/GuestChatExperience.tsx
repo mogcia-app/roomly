@@ -817,7 +817,7 @@ export function GuestChatExperience({
               <div key={message.id}>
                 {shouldShowDateSeparator(message, previous, language) ? (
                   <div className="mb-3 flex justify-center">
-                    <div className="rounded-full bg-[#d8dee9] px-3 py-1 text-[11px] font-light text-[#56657f]">
+                    <div className="rounded-full border border-[#eadfd8] bg-[#f7f1ec] px-3 py-1 text-[11px] font-light tracking-[0.02em] text-[#8c7a71]">
                       {formatDayLabel(message.timestamp, language)}
                     </div>
                   </div>

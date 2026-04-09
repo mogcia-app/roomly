@@ -50,6 +50,7 @@ type GuestChatComposerProps = {
   language: GuestLanguage;
   mode: "ai" | "human";
   richMenu: GuestRichMenu | null;
+  onOptimisticRemove: (messageId: string) => void;
   onOptimisticSend: (message: DisplayMessage) => void;
 };
 
@@ -61,6 +62,7 @@ type GuestActionPanelProps = {
   richMenu?: GuestRichMenu | null;
   prompts: string[];
   showIntro?: boolean;
+  onOptimisticRemove: (messageId: string) => void;
   onOptimisticSend: (message: DisplayMessage) => void;
 };
 let optimisticMessageSequence = 0;
@@ -427,6 +429,7 @@ function GuestChatInput({
   language,
   mode,
   richMenu,
+  onOptimisticRemove,
   onOptimisticSend,
 }: GuestChatComposerProps) {
   const router = useRouter();
@@ -526,13 +529,15 @@ function GuestChatInput({
       return;
     }
 
-    onOptimisticSend(createOptimisticMessage("optimistic", "guest", trimmed));
+    const optimisticMessage = createOptimisticMessage("optimistic", "guest", trimmed);
+    onOptimisticSend(optimisticMessage);
     setError(null);
     setMessage("");
 
     const response = await postGuestMessage(trimmed, mode);
 
     if (!response.ok) {
+      onOptimisticRemove(optimisticMessage.id);
       setError(ui.messageSendError);
       return;
     }
@@ -576,11 +581,13 @@ function GuestChatInput({
     }
 
     if (action.actionType === "ai_prompt" && action.prompt) {
-      onOptimisticSend(createOptimisticMessage("rich-prompt", "ai", action.prompt));
+      const optimisticMessage = createOptimisticMessage("rich-prompt", "ai", action.prompt);
+      onOptimisticSend(optimisticMessage);
 
       const response = await postAiStarterMessage(action.prompt);
 
       if (!response.ok) {
+        onOptimisticRemove(optimisticMessage.id);
         setError(ui.messageSendError);
         return;
       }
@@ -600,15 +607,14 @@ function GuestChatInput({
     }
 
     if (action.actionType === "ai_message" && (action.messageText || action.messageImageUrl)) {
-      onOptimisticSend(
-        createOptimisticRichMessage(
-          "rich-ai-message",
-          "ai",
-          action.messageText ?? "",
-          action.messageImageUrl,
-          action.messageImageAlt,
-        ),
+      const optimisticMessage = createOptimisticRichMessage(
+        "rich-ai-message",
+        "ai",
+        action.messageText ?? "",
+        action.messageImageUrl,
+        action.messageImageAlt,
       );
+      onOptimisticSend(optimisticMessage);
 
       const response = await postAiDisplayMessage(
         action.messageText,
@@ -617,6 +623,7 @@ function GuestChatInput({
       );
 
       if (!response.ok) {
+        onOptimisticRemove(optimisticMessage.id);
         setError(ui.messageSendError);
         return;
       }
@@ -633,13 +640,17 @@ function GuestChatInput({
       action.actionType === "handoff_category" &&
       action.handoffCategory
     ) {
-      onOptimisticSend(
-        createOptimisticMessage("handoff-category", "guest", action.handoffCategory),
+      const optimisticMessage = createOptimisticMessage(
+        "handoff-category",
+        "guest",
+        action.handoffCategory,
       );
+      onOptimisticSend(optimisticMessage);
 
       const response = await postHumanHandoff(action.handoffCategory);
 
       if (!response.ok) {
+        onOptimisticRemove(optimisticMessage.id);
         setError(ui.handoffError);
         return;
       }
@@ -808,6 +819,7 @@ function GuestActionPanel({
   richMenu,
   prompts,
   showIntro = false,
+  onOptimisticRemove,
   onOptimisticSend,
 }: GuestActionPanelProps) {
   const router = useRouter();
@@ -823,7 +835,8 @@ function GuestActionPanel({
   async function submitAiPrompt(body: string) {
     setError(null);
 
-    onOptimisticSend(createOptimisticMessage("starter", "guest", body));
+    const optimisticMessage = createOptimisticMessage("starter", "guest", body);
+    onOptimisticSend(optimisticMessage);
 
     const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
       method: "POST",
@@ -837,6 +850,7 @@ function GuestActionPanel({
     });
 
     if (!response.ok) {
+      onOptimisticRemove(optimisticMessage.id);
       setError(ui.aiStarterError);
       return;
     }
@@ -850,9 +864,8 @@ function GuestActionPanel({
     setError(null);
     setIsRequestOptionsOpen(false);
 
-    onOptimisticSend(
-      createOptimisticMessage("handoff-category", "guest", category),
-    );
+    const optimisticMessage = createOptimisticMessage("handoff-category", "guest", category);
+    onOptimisticSend(optimisticMessage);
 
     const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
       method: "POST",
@@ -863,6 +876,7 @@ function GuestActionPanel({
     });
 
     if (!response.ok) {
+      onOptimisticRemove(optimisticMessage.id);
       setError(ui.handoffError);
       return;
     }
@@ -1016,6 +1030,9 @@ export function GuestChatExperience({
   const ui = getGuestUiCopy(language);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const removeOptimisticMessage = (messageId: string) => {
+    setOptimisticMessages((current) => current.filter((message) => message.id !== messageId));
+  };
 
   const messages = useMemo<DisplayMessage[]>(() => {
     return [...initialMessages, ...optimisticMessages];
@@ -1070,6 +1087,7 @@ export function GuestChatExperience({
             richMenu={richMenu}
             prompts={prompts}
             showIntro
+            onOptimisticRemove={removeOptimisticMessage}
             onOptimisticSend={(message) => {
               setOptimisticMessages((current) => [...current, message]);
             }}
@@ -1156,6 +1174,7 @@ export function GuestChatExperience({
               knowledge={knowledge}
               richMenu={richMenu}
               prompts={prompts}
+              onOptimisticRemove={removeOptimisticMessage}
               onOptimisticSend={(message) => {
                 setOptimisticMessages((current) => [...current, message]);
               }}
@@ -1170,6 +1189,7 @@ export function GuestChatExperience({
         language={language}
         mode={mode}
         richMenu={richMenu}
+        onOptimisticRemove={removeOptimisticMessage}
         onOptimisticSend={(message) => {
           setOptimisticMessages((current) => [...current, message]);
         }}

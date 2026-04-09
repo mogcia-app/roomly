@@ -440,7 +440,7 @@ function GuestChatInput({
   const [isPending, startTransition] = useTransition();
 
   async function postGuestMessage(body: string, nextMode: "ai" | "human") {
-    return fetch(`/api/guest/rooms/${roomId}/messages`, {
+    const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -450,6 +450,16 @@ function GuestChatInput({
         mode: nextMode,
       }),
     });
+
+    const payload = response.ok
+      ? await response.json() as { threadId?: string; mode?: "ai" | "human" }
+      : null;
+
+    return {
+      ok: response.ok,
+      threadId: payload?.threadId ?? null,
+      mode: payload?.mode ?? nextMode,
+    };
   }
 
   async function postAiStarterMessage(body: string) {
@@ -475,7 +485,12 @@ function GuestChatInput({
     };
   }
 
-  async function postAiDisplayMessage(body?: string, imageUrl?: string, imageAlt?: string) {
+  async function postAiDisplayMessage(
+    body?: string,
+    imageUrl?: string,
+    imageAlt?: string,
+    category?: string,
+  ) {
     const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
       method: "POST",
       headers: {
@@ -485,6 +500,7 @@ function GuestChatInput({
         body,
         imageUrl,
         imageAlt,
+        category,
         mode: "ai",
         kind: "ai_message",
       }),
@@ -543,6 +559,11 @@ function GuestChatInput({
     }
 
     startTransition(() => {
+      if (response.mode === "human" && mode !== "human") {
+        router.push(`/guest/${roomId}/chat?mode=human`);
+        return;
+      }
+
       router.refresh();
     });
   }
@@ -620,6 +641,7 @@ function GuestChatInput({
         action.messageText,
         action.messageImageUrl,
         action.messageImageAlt,
+        action.label,
       );
 
       if (!response.ok) {

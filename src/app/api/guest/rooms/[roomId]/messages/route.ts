@@ -15,6 +15,7 @@ type GuestMessagePayload = {
   guestLanguage?: string;
   imageAlt?: string;
   imageUrl?: string;
+  category?: string;
   mode?: "ai" | "human";
   kind?: "guest_message" | "ai_starter" | "ai_message";
 };
@@ -66,6 +67,7 @@ export async function POST(
             payload.body,
             payload.imageUrl,
             payload.imageAlt,
+            payload.category,
           )
         : await postGuestMessageToStore(stayStatus, mode, payload.body ?? "");
 
@@ -73,7 +75,11 @@ export async function POST(
       return Response.json({ error: result.error }, { status: 400 });
     }
 
-    return Response.json({ ok: true, threadId: result.threadId });
+    return Response.json({
+      ok: true,
+      threadId: result.threadId,
+      mode: "resolvedMode" in result ? result.resolvedMode : mode,
+    });
   } catch (error) {
     console.error("[guest/messages] failed", {
       hasServiceAccountJson: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON),

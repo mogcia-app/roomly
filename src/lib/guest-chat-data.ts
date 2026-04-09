@@ -38,6 +38,8 @@ type FirestoreChatThread = {
   status?: "new" | "in_progress" | "resolved";
   category?: string | null;
   event_type?: "chat_handoff_requested";
+  rich_menu_action_type?: "ai_message" | null;
+  rich_menu_label?: string | null;
   guest_language?: string | null;
   last_message_body?: string;
   last_message_at?: unknown;
@@ -532,6 +534,11 @@ async function updateAiThreadMetadata(
   stayStatus: GuestStayStatus,
   lastMessageBody: string,
   lastMessageSender: "guest" | "ai" | "front" | "system",
+  options?: {
+    category?: string | null;
+    richMenuActionType?: "ai_message" | null;
+    richMenuLabel?: string | null;
+  },
 ) {
   const roomDisplayName = resolveRoomDisplayName({
     room_id: stayStatus.roomId,
@@ -552,6 +559,9 @@ async function updateAiThreadMetadata(
       hotel_id: stayStatus.hotelId ?? null,
       mode: "ai" satisfies ThreadMode,
       status: "resolved" as const,
+      category: options?.category ?? null,
+      rich_menu_action_type: options?.richMenuActionType ?? null,
+      rich_menu_label: options?.richMenuLabel ?? null,
       guest_language: stayStatus.selectedLanguage,
       last_message_body: lastMessageBody,
       last_message_at: FieldValue.serverTimestamp(),
@@ -565,6 +575,40 @@ async function updateAiThreadMetadata(
     },
     { merge: true },
   );
+}
+
+async function handoffGuestReplyFromAiMessage(
+  stayStatus: GuestStayStatus,
+  body: string,
+  guestPayload: TranslationPayload,
+  category?: string | null,
+) {
+  const language = resolveGuestLanguage(stayStatus.selectedLanguage);
+  const copy = getLocalizedServerCopy(language);
+  const threadId = await ensureThread(stayStatus, "human");
+
+  await addMessage(threadId, "guest", guestPayload);
+  await addMessage(
+    threadId,
+    "system",
+    await buildTranslationPayload({
+      displayBody: copy.handoffWaiting,
+      guestLanguage: stayStatus.selectedLanguage,
+      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    }),
+  );
+
+  await updateHumanThreadMetadata(
+    threadId,
+    stayStatus,
+    guestPayload.translatedBodyFront ?? body,
+    "guest",
+    category ?? undefined,
+  );
+
+  return { ok: true as const, threadId, resolvedMode: "human" as const };
 }
 
 export async function ensureGuestHumanThread(stayStatus: GuestStayStatus) {
@@ -1505,12 +1549,34 @@ export async function postGuestMessageToStore(
 
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
   const copy = getLocalizedServerCopy(language);
-  const threadId = await ensureThread(stayStatus, mode);
   const guestPayload = await buildTranslationPayload({
     displayBody: trimmedBody,
     guestLanguage: stayStatus.selectedLanguage,
     frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
   });
+
+  if (mode === "ai") {
+    const existingAiThread = await findThread(stayStatus, "ai");
+    const aiThreadData = existingAiThread?.data() as FirestoreChatThread | undefined;
+
+    if (existingAiThread && aiThreadData?.rich_menu_action_type === "ai_message") {
+      const aiMessages = await getMessagesByThreadId(existingAiThread.id);
+      const hasGuestOrFrontReply = aiMessages.some(
+        (message) => message.sender === "guest" || message.sender === "front",
+      );
+
+      if (!hasGuestOrFrontReply) {
+        return handoffGuestReplyFromAiMessage(
+          stayStatus,
+          trimmedBody,
+          guestPayload,
+          aiThreadData.category ?? aiThreadData.rich_menu_label ?? null,
+        );
+      }
+    }
+  }
+
+  const threadId = await ensureThread(stayStatus, mode);
 
   await addMessage(threadId, "guest", guestPayload);
 
@@ -1552,7 +1618,7 @@ export async function postGuestMessageToStore(
     );
   }
 
-  return { ok: true as const, threadId };
+  return { ok: true as const, threadId, resolvedMode: mode };
 }
 
 export async function postGuestAiStarterToStore(
@@ -1593,6 +1659,7 @@ export async function postGuestAiMessageToStore(
   body?: string,
   imageUrl?: string,
   imageAlt?: string,
+  category?: string,
 ) {
   const trimmedBody = body?.trim() ?? "";
   const trimmedImageUrl = imageUrl?.trim() ?? "";
@@ -1630,6 +1697,11 @@ export async function postGuestAiMessageToStore(
     stayStatus,
     trimmedBody || trimmedImageAlt || "AI message",
     "ai",
+    {
+      category: category ?? null,
+      richMenuActionType: "ai_message",
+      richMenuLabel: category ?? null,
+    },
   );
 
   return { ok: true as const, threadId };

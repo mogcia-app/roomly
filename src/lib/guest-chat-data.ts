@@ -753,9 +753,64 @@ function buildCharacterNgrams(value: string, size = 2) {
   return ngrams;
 }
 
+const KNOWLEDGE_MATCH_STOPWORDS = new Set([
+  "ご利用",
+  "利用",
+  "日時",
+  "時間",
+  "時刻",
+  "日付",
+  "場所",
+  "行き先",
+  "注意事項",
+  "注意",
+  "内容",
+  "希望",
+  "必要事項",
+  "記載",
+  "ください",
+  "案内",
+  "確認",
+  "方法",
+  "where",
+  "what",
+  "when",
+  "time",
+  "date",
+  "place",
+  "location",
+  "details",
+  "note",
+  "notes",
+  "please",
+  "info",
+  "information",
+  "位置",
+  "地点",
+  "时间",
+  "日期",
+  "事项",
+  "內容",
+  "内容",
+  "時間",
+  "日期",
+  "事項",
+  "내용",
+  "시간",
+  "장소",
+  "위치",
+  "사항",
+]);
+
 function extractSearchTokens(value: string) {
   const tokens = value.match(/[A-Za-z0-9]{2,}|[\u3040-\u30ff\u3400-\u9fff]{2,}/g) ?? [];
-  return [...new Set(tokens.map((token) => normalizeText(token)).filter(Boolean))];
+  return [
+    ...new Set(
+      tokens
+        .map((token) => normalizeText(token))
+        .filter((token) => Boolean(token) && !KNOWLEDGE_MATCH_STOPWORDS.has(token)),
+    ),
+  ];
 }
 
 function compactParts(values: Array<string | null | undefined>) {
@@ -883,11 +938,17 @@ function scoreKnowledgeMatch(question: string, candidate: string) {
   let score = 0;
   const questionTokens = extractSearchTokens(question);
   const candidateTokens = new Set(extractSearchTokens(candidate));
+  let matchedTokenCount = 0;
 
   for (const token of questionTokens) {
     if (candidateTokens.has(token)) {
+      matchedTokenCount += 1;
       score += Math.max(2, token.length);
     }
+  }
+
+  if (matchedTokenCount === 0) {
+    return 0;
   }
 
   const questionNgrams = buildCharacterNgrams(question);

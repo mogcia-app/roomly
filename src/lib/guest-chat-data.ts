@@ -1412,6 +1412,14 @@ export async function getGuestMessagesFromStore(
       return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
     }
 
+    if (
+      mode === "ai" &&
+      !threadId &&
+      !messages.some((message) => message.sender === "guest" || message.sender === "front")
+    ) {
+      return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
+    }
+
     return messages;
   } catch {
     return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);

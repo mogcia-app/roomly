@@ -359,6 +359,27 @@ function normalizeMessage(
   };
 }
 
+function buildRuntimeMessage(
+  sender: NonNullable<FirestoreMessage["sender"]>,
+  payload: TranslationPayload,
+): GuestMessage {
+  return {
+    id: `runtime-${sender}-${Math.random().toString(36).slice(2, 10)}`,
+    sender,
+    body: payload.body,
+    imageUrl: payload.imageUrl ?? null,
+    imageAlt: payload.imageAlt ?? null,
+    timestamp: new Date().toISOString(),
+    originalBody: payload.originalBody,
+    originalLanguage: payload.originalLanguage,
+    translatedBodyFront: payload.translatedBodyFront,
+    translatedLanguageFront: payload.translatedLanguageFront,
+    translatedBodyGuest: payload.translatedBodyGuest,
+    translatedLanguageGuest: payload.translatedLanguageGuest,
+    translationState: payload.translationState,
+  };
+}
+
 async function addMessage(
   threadId: string,
   sender: FirestoreMessage["sender"],
@@ -586,18 +607,19 @@ async function handoffGuestReplyFromAiMessage(
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
   const copy = getLocalizedServerCopy(language);
   const threadId = await ensureThread(stayStatus, "human");
+  const waitingPayload = await buildTranslationPayload({
+    displayBody: copy.handoffWaiting,
+    guestLanguage: stayStatus.selectedLanguage,
+    originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+    frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+  });
 
   await addMessage(threadId, "guest", guestPayload);
   await addMessage(
     threadId,
     "system",
-    await buildTranslationPayload({
-      displayBody: copy.handoffWaiting,
-      guestLanguage: stayStatus.selectedLanguage,
-      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
-      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
-    }),
+    waitingPayload,
   );
 
   await updateHumanThreadMetadata(
@@ -608,7 +630,15 @@ async function handoffGuestReplyFromAiMessage(
     category ?? undefined,
   );
 
-  return { ok: true as const, threadId, resolvedMode: "human" as const };
+  return {
+    ok: true as const,
+    threadId,
+    messages: [
+      buildRuntimeMessage("guest", guestPayload),
+      buildRuntimeMessage("system", waitingPayload),
+    ],
+    resolvedMode: "human" as const,
+  };
 }
 
 export async function ensureGuestHumanThread(stayStatus: GuestStayStatus) {
@@ -1492,42 +1522,17 @@ export async function getGuestMessagesFromStore(
   mode: ThreadMode,
   threadId?: string | null,
 ) {
-  if (!hasFirebaseAdminCredentials()) {
-    return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
+  const fallbackMessages = buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
+
+  if (!threadId || !hasFirebaseAdminCredentials()) {
+    return fallbackMessages;
   }
 
   try {
-    if (threadId) {
-      const messages = await getMessagesByThreadId(threadId);
-
-      if (messages.length > 0) {
-        return messages;
-      }
-    }
-
-    const thread = await findThread(stayStatus, mode);
-
-    if (!thread) {
-      return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
-    }
-
-    const messages = await getMessagesByThreadId(thread.id);
-
-    if (messages.length === 0) {
-      return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
-    }
-
-    if (
-      mode === "ai" &&
-      !threadId &&
-      !messages.some((message) => message.sender === "guest" || message.sender === "front")
-    ) {
-      return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
-    }
-
-    return messages;
+    const messages = await getMessagesByThreadId(threadId);
+    return messages.length > 0 ? messages : fallbackMessages;
   } catch {
-    return buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
+    return fallbackMessages;
   }
 }
 
@@ -1536,7 +1541,12 @@ export async function requestHumanHandoff(
   category?: string,
 ) {
   if (!hasFirebaseAdminCredentials()) {
-    return { ok: true as const, threadId: "demo-human" };
+    return {
+      ok: true as const,
+      threadId: "demo-human",
+      messages: buildFallbackMessagesForLanguage("human", stayStatus.selectedLanguage),
+      resolvedMode: "human" as const,
+    };
   }
 
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
@@ -1559,17 +1569,23 @@ export async function requestHumanHandoff(
     await addMessage(threadId, "guest", guestPayload);
   }
 
+  const responseMessages: GuestMessage[] = hasGuestRequest
+    ? []
+    : [buildRuntimeMessage("guest", guestPayload)];
+
   if (!category) {
+    const waitingPayload = await buildTranslationPayload({
+      displayBody: copy.handoffWaiting,
+      guestLanguage: stayStatus.selectedLanguage,
+      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    });
+
     await addMessage(
       threadId,
       "system",
-      await buildTranslationPayload({
-        displayBody: copy.handoffWaiting,
-        guestLanguage: stayStatus.selectedLanguage,
-        originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-        displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
-        frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
-      }),
+      waitingPayload,
     );
 
     await updateHumanThreadMetadata(
@@ -1579,7 +1595,12 @@ export async function requestHumanHandoff(
       "system",
     );
 
-    return { ok: true as const, threadId };
+    return {
+      ok: true as const,
+      threadId,
+      messages: [...responseMessages, buildRuntimeMessage("system", waitingPayload)],
+      resolvedMode: "human" as const,
+    };
   }
 
   await updateHumanThreadMetadata(
@@ -1590,7 +1611,12 @@ export async function requestHumanHandoff(
     category,
   );
 
-  return { ok: true as const, threadId };
+  return {
+    ok: true as const,
+    threadId,
+    messages: responseMessages,
+    resolvedMode: "human" as const,
+  };
 }
 
 export async function postGuestMessageToStore(
@@ -1605,7 +1631,12 @@ export async function postGuestMessageToStore(
   }
 
   if (!hasFirebaseAdminCredentials()) {
-    return { ok: true as const, threadId: `demo-${mode}` };
+    return {
+      ok: true as const,
+      threadId: `demo-${mode}`,
+      messages: [],
+      resolvedMode: mode,
+    };
   }
 
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
@@ -1640,35 +1671,41 @@ export async function postGuestMessageToStore(
   const threadId = await ensureThread(stayStatus, mode);
 
   await addMessage(threadId, "guest", guestPayload);
+  const responseMessages: GuestMessage[] = [buildRuntimeMessage("guest", guestPayload)];
 
   if (mode === "ai") {
     const aiReply = buildAiReply(stayStatus, trimmedBody);
+    const aiPayload = await buildTranslationPayload({
+      displayBody: aiReply,
+      guestLanguage: stayStatus.selectedLanguage,
+      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    });
+
     await addMessage(
       threadId,
       "ai",
-      await buildTranslationPayload({
-        displayBody: aiReply,
-        guestLanguage: stayStatus.selectedLanguage,
-        originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-        displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
-        frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
-      }),
+      aiPayload,
     );
 
     await updateAiThreadMetadata(threadId, stayStatus, aiReply, "ai");
+    responseMessages.push(buildRuntimeMessage("ai", aiPayload));
   }
 
   if (mode === "human") {
+    const waitingPayload = await buildTranslationPayload({
+      displayBody: copy.handoffWaiting,
+      guestLanguage: stayStatus.selectedLanguage,
+      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    });
+
     await addMessage(
       threadId,
       "system",
-      await buildTranslationPayload({
-        displayBody: copy.handoffWaiting,
-        guestLanguage: stayStatus.selectedLanguage,
-        originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-        displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
-        frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
-      }),
+      waitingPayload,
     );
 
     await updateHumanThreadMetadata(
@@ -1677,9 +1714,10 @@ export async function postGuestMessageToStore(
       guestPayload.translatedBodyFront ?? trimmedBody,
       "guest",
     );
+    responseMessages.push(buildRuntimeMessage("system", waitingPayload));
   }
 
-  return { ok: true as const, threadId, resolvedMode: mode };
+  return { ok: true as const, threadId, messages: responseMessages, resolvedMode: mode };
 }
 
 export async function postGuestAiStarterToStore(
@@ -1693,26 +1731,37 @@ export async function postGuestAiStarterToStore(
   }
 
   if (!hasFirebaseAdminCredentials()) {
-    return { ok: true as const, threadId: "demo-ai" };
+    return {
+      ok: true as const,
+      threadId: "demo-ai",
+      messages: [],
+      resolvedMode: "ai" as const,
+    };
   }
 
   const threadId = await createThread(stayStatus, "ai");
+  const aiPayload = await buildTranslationPayload({
+    displayBody: trimmedBody,
+    guestLanguage: stayStatus.selectedLanguage,
+    originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+    frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+  });
 
   await addMessage(
     threadId,
     "ai",
-    await buildTranslationPayload({
-      displayBody: trimmedBody,
-      guestLanguage: stayStatus.selectedLanguage,
-      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
-      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
-    }),
+    aiPayload,
   );
 
   await updateAiThreadMetadata(threadId, stayStatus, trimmedBody, "ai");
 
-  return { ok: true as const, threadId };
+  return {
+    ok: true as const,
+    threadId,
+    messages: [buildRuntimeMessage("ai", aiPayload)],
+    resolvedMode: "ai" as const,
+  };
 }
 
 export async function postGuestAiMessageToStore(
@@ -1731,26 +1780,32 @@ export async function postGuestAiMessageToStore(
   }
 
   if (!hasFirebaseAdminCredentials()) {
-    return { ok: true as const, threadId: "demo-ai" };
+    return {
+      ok: true as const,
+      threadId: "demo-ai",
+      messages: [],
+      resolvedMode: "ai" as const,
+    };
   }
 
   const threadId = await ensureThread(stayStatus, "ai");
+  const aiPayload: TranslationPayload = {
+    body: trimmedBody,
+    imageUrl: trimmedImageUrl || null,
+    imageAlt: trimmedImageAlt || null,
+    originalBody: trimmedBody,
+    originalLanguage: toLanguageCode(stayStatus.selectedLanguage),
+    translatedBodyFront: trimmedBody || null,
+    translatedLanguageFront: GUEST_FRONT_DESK_LANGUAGE,
+    translatedBodyGuest: trimmedBody || null,
+    translatedLanguageGuest: toLanguageCode(stayStatus.selectedLanguage),
+    translationState: "not_required",
+  };
 
   await addMessage(
     threadId,
     "ai",
-    {
-      body: trimmedBody,
-      imageUrl: trimmedImageUrl || null,
-      imageAlt: trimmedImageAlt || null,
-      originalBody: trimmedBody,
-      originalLanguage: toLanguageCode(stayStatus.selectedLanguage),
-      translatedBodyFront: trimmedBody || null,
-      translatedLanguageFront: GUEST_FRONT_DESK_LANGUAGE,
-      translatedBodyGuest: trimmedBody || null,
-      translatedLanguageGuest: toLanguageCode(stayStatus.selectedLanguage),
-      translationState: "not_required",
-    },
+    aiPayload,
   );
 
   await updateAiThreadMetadata(
@@ -1765,5 +1820,10 @@ export async function postGuestAiMessageToStore(
     },
   );
 
-  return { ok: true as const, threadId };
+  return {
+    ok: true as const,
+    threadId,
+    messages: [buildRuntimeMessage("ai", aiPayload)],
+    resolvedMode: "ai" as const,
+  };
 }

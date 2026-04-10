@@ -39,6 +39,7 @@ type GuestChatExperienceProps = {
   knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
   initialMessages: GuestMessage[];
+  clearThreadQueryOnMount?: boolean;
 };
 
 type DisplayMessage = GuestMessage & {
@@ -50,6 +51,9 @@ type GuestChatComposerProps = {
   language: GuestLanguage;
   mode: "ai" | "human";
   richMenu: GuestRichMenu | null;
+  onModeChange: (mode: "ai" | "human") => void;
+  onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
+  onMessagesAppend: (messages: DisplayMessage[]) => void;
   onOptimisticRemove: (messageId: string) => void;
   onOptimisticSend: (message: DisplayMessage) => void;
 };
@@ -62,6 +66,8 @@ type GuestActionPanelProps = {
   richMenu?: GuestRichMenu | null;
   prompts: string[];
   showIntro?: boolean;
+  onModeChange: (mode: "ai" | "human") => void;
+  onMessagesAppend: (messages: DisplayMessage[]) => void;
   onOptimisticRemove: (messageId: string) => void;
   onOptimisticSend: (message: DisplayMessage) => void;
 };
@@ -429,6 +435,9 @@ function GuestChatInput({
   language,
   mode,
   richMenu,
+  onModeChange,
+  onMessagesReplace,
+  onMessagesAppend,
   onOptimisticRemove,
   onOptimisticSend,
 }: GuestChatComposerProps) {
@@ -452,13 +461,18 @@ function GuestChatInput({
     });
 
     const payload = response.ok
-      ? await response.json() as { threadId?: string; mode?: "ai" | "human" }
+      ? await response.json() as {
+          threadId?: string;
+          mode?: "ai" | "human";
+          messages?: GuestMessage[];
+        }
       : null;
 
     return {
       ok: response.ok,
       threadId: payload?.threadId ?? null,
       mode: payload?.mode ?? nextMode,
+      messages: (payload?.messages ?? []) as GuestMessage[],
     };
   }
 
@@ -476,12 +490,13 @@ function GuestChatInput({
     });
 
     const payload = response.ok
-      ? await response.json() as { threadId?: string }
+      ? await response.json() as { threadId?: string; messages?: GuestMessage[] }
       : null;
 
     return {
       ok: response.ok,
       threadId: payload?.threadId ?? null,
+      messages: (payload?.messages ?? []) as GuestMessage[],
     };
   }
 
@@ -507,23 +522,35 @@ function GuestChatInput({
     });
 
     const payload = response.ok
-      ? await response.json() as { threadId?: string }
+      ? await response.json() as { threadId?: string; messages?: GuestMessage[] }
       : null;
 
     return {
       ok: response.ok,
       threadId: payload?.threadId ?? null,
+      messages: (payload?.messages ?? []) as GuestMessage[],
     };
   }
 
   async function postHumanHandoff(category?: string) {
-    return fetch(`/api/guest/rooms/${roomId}/handoff`, {
+    const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(category ? { category } : {}),
     });
+
+    const payload = response.ok
+      ? await response.json() as { threadId?: string; mode?: "ai" | "human"; messages?: GuestMessage[] }
+      : null;
+
+    return {
+      ok: response.ok,
+      threadId: payload?.threadId ?? null,
+      mode: payload?.mode ?? "human",
+      messages: (payload?.messages ?? []) as GuestMessage[],
+    };
   }
 
   async function switchLanguage(languageCode: string) {
@@ -558,14 +585,11 @@ function GuestChatInput({
       return;
     }
 
-    startTransition(() => {
-      if (response.mode === "human" && mode !== "human") {
-        router.push(`/guest/${roomId}/chat?mode=human`);
-        return;
-      }
-
-      router.refresh();
-    });
+    onModeChange(response.mode);
+    onMessagesReplace(
+      optimisticMessage.id,
+      response.messages.map((message) => ({ ...message, optimistic: false })),
+    );
   }
 
   async function submitRichMenuAction(action: GuestRichMenuItem) {
@@ -613,17 +637,11 @@ function GuestChatInput({
         return;
       }
 
-      startTransition(() => {
-        if (mode !== "ai") {
-          router.push(
-            `/guest/${roomId}/chat?mode=ai${response.threadId ? `&thread=${encodeURIComponent(response.threadId)}` : ""}`,
-          );
-        } else {
-          router.push(
-            `/guest/${roomId}/chat?mode=ai${response.threadId ? `&thread=${encodeURIComponent(response.threadId)}` : ""}`,
-          );
-        }
-      });
+      onModeChange("ai");
+      onMessagesReplace(
+        optimisticMessage.id,
+        response.messages.map((message) => ({ ...message, optimistic: false })),
+      );
       return;
     }
 
@@ -650,11 +668,11 @@ function GuestChatInput({
         return;
       }
 
-      startTransition(() => {
-        router.push(
-          `/guest/${roomId}/chat?mode=ai${response.threadId ? `&thread=${encodeURIComponent(response.threadId)}` : ""}`,
-        );
-      });
+      onModeChange("ai");
+      onMessagesReplace(
+        optimisticMessage.id,
+        response.messages.map((message) => ({ ...message, optimistic: false })),
+      );
       return;
     }
 
@@ -677,9 +695,11 @@ function GuestChatInput({
         return;
       }
 
-      startTransition(() => {
-        router.push(`/guest/${roomId}/chat?mode=human`);
-      });
+      onModeChange(response.mode);
+      onMessagesReplace(
+        optimisticMessage.id,
+        response.messages.map((message) => ({ ...message, optimistic: false })),
+      );
       return;
     }
 
@@ -691,9 +711,8 @@ function GuestChatInput({
         return;
       }
 
-      startTransition(() => {
-        router.push(`/guest/${roomId}/chat?mode=human`);
-      });
+      onModeChange(response.mode);
+      onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
       return;
     }
 
@@ -841,10 +860,11 @@ function GuestActionPanel({
   richMenu,
   prompts,
   showIntro = false,
+  onModeChange,
+  onMessagesAppend,
   onOptimisticRemove,
   onOptimisticSend,
 }: GuestActionPanelProps) {
-  const router = useRouter();
   const ui = getGuestUiCopy(language);
   const actionCopy = getGuestActionCopy(language);
   const aiGuideOptions = buildAiGuideOptions(language, knowledge, prompts);
@@ -852,7 +872,7 @@ function GuestActionPanel({
   const [isRequestOptionsOpen, setIsRequestOptionsOpen] = useState(false);
   const [isAiOptionsOpen, setIsAiOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending] = useTransition();
 
   async function submitAiPrompt(body: string) {
     setError(null);
@@ -860,7 +880,7 @@ function GuestActionPanel({
     const optimisticMessage = createOptimisticMessage("starter", "guest", body);
     onOptimisticSend(optimisticMessage);
 
-    const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
+    const rawResponse = await fetch(`/api/guest/rooms/${roomId}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -871,15 +891,15 @@ function GuestActionPanel({
       }),
     });
 
-    if (!response.ok) {
+    if (!rawResponse.ok) {
       onOptimisticRemove(optimisticMessage.id);
       setError(ui.aiStarterError);
       return;
     }
 
-    startTransition(() => {
-      router.refresh();
-    });
+    const response = await rawResponse.json() as { messages?: GuestMessage[] };
+    onModeChange("ai");
+    onMessagesAppend((response.messages ?? []).map((message) => ({ ...message, optimistic: false })));
   }
 
   async function startHumanRequest(category: string) {
@@ -889,7 +909,7 @@ function GuestActionPanel({
     const optimisticMessage = createOptimisticMessage("handoff-category", "guest", category);
     onOptimisticSend(optimisticMessage);
 
-    const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
+    const rawResponse = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -897,15 +917,15 @@ function GuestActionPanel({
       body: JSON.stringify({ category }),
     });
 
-    if (!response.ok) {
+    if (!rawResponse.ok) {
       onOptimisticRemove(optimisticMessage.id);
       setError(ui.handoffError);
       return;
     }
 
-    startTransition(() => {
-      router.push(`/guest/${roomId}/chat?mode=human`);
-    });
+    const response = await rawResponse.json() as { messages?: GuestMessage[] };
+    onModeChange("human");
+    onMessagesAppend((response.messages ?? []).map((message) => ({ ...message, optimistic: false })));
   }
 
   return (
@@ -1048,23 +1068,23 @@ export function GuestChatExperience({
   knowledge,
   prompts,
   initialMessages,
+  clearThreadQueryOnMount = false,
 }: GuestChatExperienceProps) {
   const ui = getGuestUiCopy(language);
-  const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
+  const router = useRouter();
+  const [activeMode, setActiveMode] = useState<"ai" | "human">(mode);
+  const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const removeOptimisticMessage = (messageId: string) => {
-    setOptimisticMessages((current) => current.filter((message) => message.id !== messageId));
+    setChatMessages((current) => current.filter((message) => message.id !== messageId));
   };
-
-  const messages = useMemo<DisplayMessage[]>(() => {
-    return [...initialMessages, ...optimisticMessages];
-  }, [initialMessages, optimisticMessages]);
+  const messages = chatMessages;
   const hasGuestMessage = messages.some((message) => message.sender === "guest");
   const hasNonSystemHistory = messages.some(
     (message) => message.sender === "guest" || message.sender === "ai" || message.sender === "front",
   );
   const visibleMessages = useMemo(() => {
-    if (!hasGuestMessage && mode === "ai") {
+    if (!hasGuestMessage && activeMode === "ai") {
       return messages.filter(
         (message) =>
           !(
@@ -1075,11 +1095,39 @@ export function GuestChatExperience({
     }
 
     return messages;
-  }, [hasGuestMessage, messages, mode]);
+  }, [activeMode, hasGuestMessage, messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [visibleMessages]);
+
+  useEffect(() => {
+    setActiveMode(mode);
+    setChatMessages(initialMessages);
+  }, [initialMessages, mode]);
+
+  useEffect(() => {
+    if (!clearThreadQueryOnMount) {
+      return;
+    }
+
+    router.replace(`/guest/${roomId}/chat?mode=${activeMode}`, { scroll: false });
+  }, [activeMode, clearThreadQueryOnMount, roomId, router]);
+
+  const appendMessages = (newMessages: DisplayMessage[]) => {
+    if (newMessages.length === 0) {
+      return;
+    }
+
+    setChatMessages((current) => [...current, ...newMessages]);
+  };
+
+  const replaceOptimisticMessage = (messageId: string, newMessages: DisplayMessage[]) => {
+    setChatMessages((current) => [
+      ...current.filter((message) => message.id !== messageId),
+      ...newMessages,
+    ]);
+  };
 
   return (
     <>
@@ -1100,7 +1148,7 @@ export function GuestChatExperience({
             </div>
           </div>
         ) : null}
-        {!hasGuestMessage && mode === "ai" ? (
+        {!hasGuestMessage && activeMode === "ai" ? (
           <GuestActionPanel
             roomId={roomId}
             roomLabel={roomLabel}
@@ -1109,13 +1157,15 @@ export function GuestChatExperience({
             richMenu={richMenu}
             prompts={prompts}
             showIntro
+            onModeChange={setActiveMode}
+            onMessagesAppend={appendMessages}
             onOptimisticRemove={removeOptimisticMessage}
             onOptimisticSend={(message) => {
-              setOptimisticMessages((current) => [...current, message]);
+              setChatMessages((current) => [...current, message]);
             }}
           />
         ) : null}
-        {!hasGuestMessage && mode === "human" && !hasNonSystemHistory ? (
+        {!hasGuestMessage && activeMode === "human" && !hasNonSystemHistory ? (
           <HumanStarter language={language} />
         ) : null}
         <div className="space-y-3 lg:space-y-2.5">
@@ -1189,16 +1239,18 @@ export function GuestChatExperience({
               </div>
             );
           })}
-          {mode === "ai" && hasGuestMessage ? (
+          {activeMode === "ai" && hasGuestMessage ? (
             <GuestActionPanel
               roomId={roomId}
               language={language}
               knowledge={knowledge}
               richMenu={richMenu}
               prompts={prompts}
+              onModeChange={setActiveMode}
+              onMessagesAppend={appendMessages}
               onOptimisticRemove={removeOptimisticMessage}
               onOptimisticSend={(message) => {
-                setOptimisticMessages((current) => [...current, message]);
+                setChatMessages((current) => [...current, message]);
               }}
             />
           ) : null}
@@ -1209,11 +1261,14 @@ export function GuestChatExperience({
       <GuestChatInput
         roomId={roomId}
         language={language}
-        mode={mode}
+        mode={activeMode}
         richMenu={richMenu}
+        onModeChange={setActiveMode}
+        onMessagesReplace={replaceOptimisticMessage}
+        onMessagesAppend={appendMessages}
         onOptimisticRemove={removeOptimisticMessage}
         onOptimisticSend={(message) => {
-          setOptimisticMessages((current) => [...current, message]);
+          setChatMessages((current) => [...current, message]);
         }}
       />
     </>

@@ -79,6 +79,7 @@ export async function POST(
       ok: true,
       threadId: result.threadId,
       mode: "resolvedMode" in result ? result.resolvedMode : mode,
+      messages: "messages" in result ? result.messages : [],
     });
   } catch (error) {
     console.error("[guest/messages] failed", {

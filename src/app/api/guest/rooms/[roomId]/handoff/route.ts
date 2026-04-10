@@ -41,7 +41,12 @@ export async function POST(
 
     const result = await requestHumanHandoff(stayStatus, payload.category);
 
-    return Response.json({ ok: result.ok, threadId: result.threadId });
+    return Response.json({
+      ok: result.ok,
+      threadId: result.threadId,
+      mode: result.resolvedMode,
+      messages: result.messages,
+    });
   } catch (error) {
     console.error("[guest/handoff] failed", {
       hasServiceAccountJson: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON),

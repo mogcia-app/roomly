@@ -213,6 +213,7 @@ export default async function GuestChatPage({
           knowledge={room.hearingSheetKnowledge}
           prompts={room.hearingSheetPrompts}
           initialMessages={thread}
+          clearThreadQueryOnMount={Boolean(threadId)}
           debugInfo={debugInfo}
         />
       </main>

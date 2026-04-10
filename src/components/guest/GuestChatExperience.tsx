@@ -332,6 +332,14 @@ function buildRichMenuGuideText(
   return `下のクイックメニューからも ${joined} を開けます。`;
 }
 
+function normalizeGuideText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
 type AiGuideOption = {
   key: string;
   label: string;
@@ -363,37 +371,48 @@ function buildAiGuideOptions(
   prompts: string[],
 ) {
   const options: AiGuideOption[] = [];
+  const coveredPromptPrefixes = new Set<string>();
 
   if (knowledge?.wifi.length) {
     options.push({ key: "wifi", label: getAiGuideLabel(language, "wifi"), prompt: "Wi-Fiについて教えてください。" });
+    coveredPromptPrefixes.add("wi-fi");
+    coveredPromptPrefixes.add("wifi");
   }
 
   if (knowledge?.breakfast.length) {
     options.push({ key: "breakfast", label: getAiGuideLabel(language, "breakfast"), prompt: "朝食について教えてください。" });
+    coveredPromptPrefixes.add("朝食");
   }
 
   if (knowledge?.baths.length) {
+    const bathName = knowledge.baths[0]?.name ?? "大浴場";
     options.push({
       key: "bath",
       label: getAiGuideLabel(language, "bath"),
-      prompt: `${knowledge.baths[0]?.name ?? "大浴場"}について教えてください。`,
+      prompt: `${bathName}について教えてください。`,
     });
+    coveredPromptPrefixes.add("大浴場");
+    coveredPromptPrefixes.add(normalizeGuideText(bathName));
   }
 
   if ((knowledge?.facilities.length ?? 0) > 0 || (knowledge?.facilityLocations.length ?? 0) > 0) {
     options.push({ key: "facility", label: getAiGuideLabel(language, "facility"), prompt: "館内施設について教えてください。" });
+    coveredPromptPrefixes.add("館内施設");
   }
 
   if (knowledge?.amenities.length) {
     options.push({ key: "amenity", label: getAiGuideLabel(language, "amenity"), prompt: "アメニティについて教えてください。" });
+    coveredPromptPrefixes.add("アメニティ");
   }
 
   if (knowledge?.parking.length) {
     options.push({ key: "parking", label: getAiGuideLabel(language, "parking"), prompt: "駐車場について教えてください。" });
+    coveredPromptPrefixes.add("駐車場");
   }
 
   if (knowledge?.checkout.length) {
     options.push({ key: "checkout", label: getAiGuideLabel(language, "checkout"), prompt: "チェックアウトについて教えてください。" });
+    coveredPromptPrefixes.add("チェックアウト");
   }
 
   if (knowledge?.emergency.length) {
@@ -406,14 +425,20 @@ function buildAiGuideOptions(
 
   if (knowledge?.transport.length) {
     options.push({ key: "transport", label: getAiGuideLabel(language, "transport"), prompt: "交通案内を教えてください。" });
+    coveredPromptPrefixes.add("交通");
+    coveredPromptPrefixes.add("交通案内");
   }
 
   if (knowledge?.nearbySpots.length) {
     options.push({ key: "nearby", label: getAiGuideLabel(language, "nearby"), prompt: "周辺案内を教えてください。" });
+    coveredPromptPrefixes.add("周辺");
+    coveredPromptPrefixes.add("周辺案内");
   }
 
   if (knowledge?.frontDeskHours.length) {
     options.push({ key: "frontDesk", label: getAiGuideLabel(language, "frontDesk"), prompt: "フロントの対応時間を教えてください。" });
+    coveredPromptPrefixes.add("フロント");
+    coveredPromptPrefixes.add("フロント対応");
   }
 
   const existingPrompts = new Set(options.map((option) => option.prompt));
@@ -421,7 +446,18 @@ function buildAiGuideOptions(
   return [
     ...options,
     ...prompts
-      .filter((prompt) => !existingPrompts.has(prompt))
+      .filter((prompt) => {
+        if (existingPrompts.has(prompt)) {
+          return false;
+        }
+
+        const normalizedPrompt = normalizeGuideText(prompt);
+
+        return ![...coveredPromptPrefixes].some((prefix) => {
+          const normalizedPrefix = normalizeGuideText(prefix);
+          return normalizedPrefix.length > 0 && normalizedPrompt.startsWith(normalizedPrefix);
+        });
+      })
       .map((prompt) => ({
         key: `prompt:${prompt}`,
         label: prompt,

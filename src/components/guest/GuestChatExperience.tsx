@@ -299,15 +299,96 @@ function buildRichMenuGuideText(
   }
 
   if (richMenu.menuGuideText) {
-    return richMenu.menuGuideText;
+    if (language === "ja") {
+      return richMenu.menuGuideText;
+    }
+
+    if (language === "en") {
+      return "You can also use the quick menu below.";
+    }
+
+    if (language === "zh-CN") {
+      return "您也可以使用下方快捷菜单。";
+    }
+
+    if (language === "zh-TW") {
+      return "您也可以使用下方快捷選單。";
+    }
+
+    return "아래 퀵 메뉴도 사용할 수 있습니다.";
   }
 
-  const labels = richMenu.items
-    .map((item) => item.label?.trim())
-    .filter((label): label is string => Boolean(label))
-    .slice(0, 4);
+  const labels = (language === "ja"
+    ? richMenu.items
+        .map((item) => item.label?.trim())
+        .filter((label): label is string => Boolean(label))
+        .slice(0, 4)
+    : richMenu.items
+        .map((item) => {
+          const label = item.label?.trim();
+
+          if (!label) {
+            return null;
+          }
+
+          const normalized = normalizeGuideText(label);
+
+          if (["タクシー予約", "タクシー", "taxi", "taxireservation"].includes(normalized)) {
+            return language === "en"
+              ? "Taxi"
+              : language === "zh-CN"
+                ? "出租车"
+                : language === "zh-TW"
+                  ? "計程車"
+                  : "택시";
+          }
+
+          if (["hp", "homepage", "website", "公式サイト"].includes(normalized)) {
+            return language === "en"
+              ? "Website"
+              : language === "zh-CN"
+                ? "官网"
+                : language === "zh-TW"
+                  ? "官網"
+                  : "웹사이트";
+          }
+
+          if (["公式インスタグラム", "インスタグラム", "instagram", "officialinstagram"].includes(normalized)) {
+            return "Instagram";
+          }
+
+          if (["言語", "language"].includes(normalized)) {
+            return language === "en"
+              ? "Language"
+              : language === "zh-CN"
+                ? "语言"
+                : language === "zh-TW"
+                  ? "語言"
+                  : "언어";
+          }
+
+          return null;
+        })
+        .filter((label): label is Exclude<typeof label, null> => label !== null)
+        .slice(0, 4));
 
   if (labels.length === 0) {
+    if (language === "en") {
+      return "You can also use the quick menu below.";
+    }
+
+    if (language === "zh-CN") {
+      return "您也可以使用下方快捷菜单。";
+    }
+
+    if (language === "zh-TW") {
+      return "您也可以使用下方快捷選單。";
+    }
+
+    if (language === "ko") {
+      return "아래 퀵 메뉴도 사용할 수 있습니다.";
+    }
+
     return null;
   }
 
@@ -338,6 +419,108 @@ function normalizeGuideText(value: string) {
     .normalize("NFKC")
     .replace(/\s+/g, "")
     .trim();
+}
+
+function formatIntroRoomLabel(roomLabel: string, language: GuestLanguage) {
+  return language === "ja" ? `${roomLabel}様` : roomLabel;
+}
+
+function localizeSupplementalValue(language: GuestLanguage, value: string) {
+  if (language === "ja") {
+    return value;
+  }
+
+  return value
+    .replace(
+      /レストラン/g,
+      language === "en"
+        ? "Restaurant"
+        : language === "ko"
+          ? "레스토랑"
+          : language === "zh-TW"
+            ? "餐廳"
+            : "餐厅",
+    )
+    .replace(
+      /別館/g,
+      language === "en"
+        ? "Annex "
+        : language === "ko"
+          ? "별관 "
+          : language === "zh-TW"
+            ? "別館"
+            : "别馆",
+    )
+    .replace(
+      /本館/g,
+      language === "en"
+        ? "Main building "
+        : language === "ko"
+          ? "본관 "
+          : language === "zh-TW"
+            ? "本館"
+            : "本馆",
+    );
+}
+
+function localizeSupplementalPrompt(language: GuestLanguage, prompt: string) {
+  if (language === "ja") {
+    return prompt;
+  }
+
+  const separatorIndex = prompt.indexOf(":");
+
+  if (separatorIndex < 0) {
+    return prompt;
+  }
+
+  const prefix = prompt.slice(0, separatorIndex).trim();
+  const suffix = localizeSupplementalValue(language, prompt.slice(separatorIndex + 1).trim());
+
+  const translatedPrefix =
+    prefix === "朝食"
+      ? language === "en"
+        ? "Breakfast"
+        : language === "zh-CN"
+          ? "早餐"
+          : language === "zh-TW"
+            ? "早餐"
+            : "조식"
+      : prefix === "大浴場"
+        ? language === "en"
+          ? "Bath"
+          : language === "zh-CN"
+            ? "浴场"
+            : language === "zh-TW"
+              ? "浴場"
+              : "대욕장"
+        : prefix === "チェックアウト"
+          ? language === "en"
+            ? "Checkout"
+            : language === "zh-CN"
+              ? "退房"
+              : language === "zh-TW"
+                ? "退房"
+                : "체크아웃"
+          : prefix === "駐車場"
+            ? language === "en"
+              ? "Parking"
+              : language === "zh-CN"
+                ? "停车场"
+                : language === "zh-TW"
+                  ? "停車場"
+                  : "주차장"
+            : prefix === "周辺"
+              ? language === "en"
+                ? "Nearby"
+                : language === "zh-CN"
+                  ? "周边"
+                  : language === "zh-TW"
+                    ? "周邊"
+                    : "주변"
+              : prefix;
+
+  return `${translatedPrefix}: ${suffix}`;
 }
 
 type AiGuideOption = {
@@ -460,7 +643,7 @@ function buildAiGuideOptions(
       })
       .map((prompt) => ({
         key: `prompt:${prompt}`,
-        label: prompt,
+        label: localizeSupplementalPrompt(language, prompt),
         prompt,
       })),
   ];
@@ -978,7 +1161,7 @@ function GuestActionPanel({
         </div>
         <div className="max-w-[82%] rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:max-w-[48%] xl:max-w-[42%]">
           <div className="whitespace-pre-line">
-            {showIntro && roomLabel ? `${roomLabel}様\n` : ""}
+            {showIntro && roomLabel ? `${formatIntroRoomLabel(roomLabel, language)}\n` : ""}
             {showIntro ? ui.introMessage : actionCopy.helperBody}
           </div>
           {richMenuGuideText ? (

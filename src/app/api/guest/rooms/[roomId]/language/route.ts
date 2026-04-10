@@ -5,6 +5,7 @@ import {
 import {
   isGuestLanguage,
 } from "@/lib/guest-demo";
+import { updateGuestThreadLanguage } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -57,9 +58,13 @@ export async function POST(
   }
 
   await setStoredGuestLanguage(access.accessToken, body.language);
+  const threadUpdate = await updateGuestThreadLanguage(stayStatus, body.language);
 
   return Response.json({
     ok: true,
     language: body.language,
+    threadUpdated: threadUpdate.updated,
+    threadId: threadUpdate.threadId,
+    threadMode: threadUpdate.mode,
   });
 }

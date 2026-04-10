@@ -57,6 +57,10 @@ type ChatThreadCandidate = {
 type FirestoreMessage = {
   thread_id?: string;
   threadId?: string;
+  stay_id?: string;
+  stayId?: string;
+  room_id?: string;
+  roomId?: string;
   sender?: "guest" | "front" | "ai" | "system";
   body?: string;
   image_url?: string | null;
@@ -381,12 +385,15 @@ function buildRuntimeMessage(
 }
 
 async function addMessage(
+  stayStatus: GuestStayStatus,
   threadId: string,
   sender: FirestoreMessage["sender"],
   payload: TranslationPayload,
 ) {
   await getAdminDb().collection("messages").add({
     thread_id: threadId,
+    stay_id: stayStatus.stayId ?? stayStatus.roomId,
+    room_id: stayStatus.roomId,
     sender,
     body: payload.body,
     image_url: payload.imageUrl ?? null,
@@ -400,6 +407,25 @@ async function addMessage(
     translation_state: payload.translationState,
     timestamp: FieldValue.serverTimestamp(),
   } satisfies FirestoreMessage & { timestamp: unknown });
+}
+
+function resolveThreadGuestLanguage(
+  thread: FirestoreChatThread | null | undefined,
+  stayStatus: GuestStayStatus,
+) {
+  const threadLanguage = thread?.guest_language;
+
+  if (
+    threadLanguage === "ja" ||
+    threadLanguage === "en" ||
+    threadLanguage === "zh-CN" ||
+    threadLanguage === "zh-TW" ||
+    threadLanguage === "ko"
+  ) {
+    return threadLanguage;
+  }
+
+  return stayStatus.selectedLanguage ?? "ja";
 }
 
 async function findThread(
@@ -512,6 +538,7 @@ async function updateHumanThreadMetadata(
   lastMessageBody: string,
   lastMessageSender: "guest" | "ai" | "front" | "system",
   category?: string,
+  status?: "new" | "in_progress",
 ) {
   const roomDisplayName = resolveRoomDisplayName({
     room_id: stayStatus.roomId,
@@ -530,7 +557,7 @@ async function updateHumanThreadMetadata(
       room_number: roomNumber,
       hotel_id: stayStatus.hotelId ?? null,
       mode: "human" satisfies ThreadMode,
-      status: "new" as const,
+      status: status ?? "new",
       category: category ?? null,
       event_type: "chat_handoff_requested" as const,
       guest_language: stayStatus.selectedLanguage,
@@ -607,16 +634,19 @@ async function handoffGuestReplyFromAiMessage(
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
   const copy = getLocalizedServerCopy(language);
   const threadId = await ensureThread(stayStatus, "human");
+  const existingHumanThread = await getAdminDb().collection("chat_threads").doc(threadId).get();
+  const existingHumanThreadData = existingHumanThread.data() as FirestoreChatThread | undefined;
   const waitingPayload = await buildTranslationPayload({
     displayBody: copy.handoffWaiting,
-    guestLanguage: stayStatus.selectedLanguage,
+    guestLanguage: resolveThreadGuestLanguage(existingHumanThreadData, stayStatus),
     originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-    displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+    displayLanguage: toLanguageCode(resolveThreadGuestLanguage(existingHumanThreadData, stayStatus)),
     frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
   });
 
-  await addMessage(threadId, "guest", guestPayload);
+  await addMessage(stayStatus, threadId, "guest", guestPayload);
   await addMessage(
+    stayStatus,
     threadId,
     "system",
     waitingPayload,
@@ -628,6 +658,7 @@ async function handoffGuestReplyFromAiMessage(
     guestPayload.translatedBodyFront ?? body,
     "guest",
     category ?? undefined,
+    existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
   );
 
   return {
@@ -647,6 +678,49 @@ export async function ensureGuestHumanThread(stayStatus: GuestStayStatus) {
   }
 
   return ensureThread(stayStatus, "human");
+}
+
+export async function updateGuestThreadLanguage(
+  stayStatus: GuestStayStatus,
+  language: GuestLanguage,
+) {
+  if (!hasFirebaseAdminCredentials()) {
+    return { updated: false as const, threadId: null, mode: null };
+  }
+
+  const humanThread = await findThread(stayStatus, "human");
+
+  if (humanThread) {
+    await getAdminDb().collection("chat_threads").doc(humanThread.id).set(
+      {
+        guest_language: language,
+        updated_at: FieldValue.serverTimestamp(),
+      } satisfies Pick<FirestoreChatThread, "guest_language" | "updated_at"> & {
+        updated_at: unknown;
+      },
+      { merge: true },
+    );
+
+    return { updated: true as const, threadId: humanThread.id, mode: "human" as const };
+  }
+
+  const aiThread = await findThread(stayStatus, "ai");
+
+  if (aiThread) {
+    await getAdminDb().collection("chat_threads").doc(aiThread.id).set(
+      {
+        guest_language: language,
+        updated_at: FieldValue.serverTimestamp(),
+      } satisfies Pick<FirestoreChatThread, "guest_language" | "updated_at"> & {
+        updated_at: unknown;
+      },
+      { merge: true },
+    );
+
+    return { updated: true as const, threadId: aiThread.id, mode: "ai" as const };
+  }
+
+  return { updated: false as const, threadId: null, mode: null };
 }
 
 async function getMessagesByThreadId(threadId: string) {
@@ -1552,11 +1626,14 @@ export async function requestHumanHandoff(
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
   const copy = getLocalizedServerCopy(language);
   const threadId = await ensureThread(stayStatus, "human");
+  const existingHumanThread = await getAdminDb().collection("chat_threads").doc(threadId).get();
+  const existingHumanThreadData = existingHumanThread.data() as FirestoreChatThread | undefined;
+  const resolvedGuestLanguage = resolveThreadGuestLanguage(existingHumanThreadData, stayStatus);
   const existingMessages = await getMessagesByThreadId(threadId);
   const guestBody = category ?? copy.handoffRequest;
   const guestPayload = await buildTranslationPayload({
     displayBody: guestBody,
-    guestLanguage: stayStatus.selectedLanguage,
+    guestLanguage: resolvedGuestLanguage,
     frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
   });
   const hasGuestRequest = existingMessages.some(
@@ -1566,7 +1643,7 @@ export async function requestHumanHandoff(
   );
 
   if (!hasGuestRequest) {
-    await addMessage(threadId, "guest", guestPayload);
+    await addMessage(stayStatus, threadId, "guest", guestPayload);
   }
 
   const responseMessages: GuestMessage[] = hasGuestRequest
@@ -1576,13 +1653,14 @@ export async function requestHumanHandoff(
   if (!category) {
     const waitingPayload = await buildTranslationPayload({
       displayBody: copy.handoffWaiting,
-      guestLanguage: stayStatus.selectedLanguage,
+      guestLanguage: resolveThreadGuestLanguage(existingMessages.length > 0 ? existingHumanThreadData : undefined, stayStatus),
       originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-      displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+      displayLanguage: toLanguageCode(resolveThreadGuestLanguage(existingMessages.length > 0 ? existingHumanThreadData : undefined, stayStatus)),
       frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
     });
 
     await addMessage(
+      stayStatus,
       threadId,
       "system",
       waitingPayload,
@@ -1593,6 +1671,8 @@ export async function requestHumanHandoff(
       stayStatus,
       copy.handoffWaiting,
       "system",
+      undefined,
+      existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
     );
 
     return {
@@ -1609,6 +1689,7 @@ export async function requestHumanHandoff(
     guestPayload.translatedBodyFront ?? guestBody,
     "guest",
     category,
+    existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
   );
 
   return {
@@ -1641,15 +1722,21 @@ export async function postGuestMessageToStore(
 
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
   const copy = getLocalizedServerCopy(language);
+  const existingThread =
+    mode === "human" || mode === "ai"
+      ? await findThread(stayStatus, mode)
+      : null;
+  const existingThreadData = existingThread?.data() as FirestoreChatThread | undefined;
+  const resolvedGuestLanguage = resolveThreadGuestLanguage(existingThreadData, stayStatus);
   const guestPayload = await buildTranslationPayload({
     displayBody: trimmedBody,
-    guestLanguage: stayStatus.selectedLanguage,
+    guestLanguage: resolvedGuestLanguage,
     frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
   });
 
   if (mode === "ai") {
-    const existingAiThread = await findThread(stayStatus, "ai");
-    const aiThreadData = existingAiThread?.data() as FirestoreChatThread | undefined;
+    const existingAiThread = existingThread;
+    const aiThreadData = existingThreadData;
 
     if (existingAiThread && aiThreadData?.rich_menu_action_type === "ai_message") {
       const aiMessages = await getMessagesByThreadId(existingAiThread.id);
@@ -1668,9 +1755,9 @@ export async function postGuestMessageToStore(
     }
   }
 
-  const threadId = await ensureThread(stayStatus, mode);
+  const threadId = existingThread?.id ?? await createThread(stayStatus, mode);
 
-  await addMessage(threadId, "guest", guestPayload);
+  await addMessage(stayStatus, threadId, "guest", guestPayload);
   const responseMessages: GuestMessage[] = [buildRuntimeMessage("guest", guestPayload)];
 
   if (mode === "ai") {
@@ -1684,6 +1771,7 @@ export async function postGuestMessageToStore(
     });
 
     await addMessage(
+      stayStatus,
       threadId,
       "ai",
       aiPayload,
@@ -1696,13 +1784,14 @@ export async function postGuestMessageToStore(
   if (mode === "human") {
     const waitingPayload = await buildTranslationPayload({
       displayBody: copy.handoffWaiting,
-      guestLanguage: stayStatus.selectedLanguage,
+      guestLanguage: resolvedGuestLanguage,
       originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
       displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
       frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
     });
 
     await addMessage(
+      stayStatus,
       threadId,
       "system",
       waitingPayload,
@@ -1713,6 +1802,8 @@ export async function postGuestMessageToStore(
       stayStatus,
       guestPayload.translatedBodyFront ?? trimmedBody,
       "guest",
+      undefined,
+      existingThreadData?.status === "in_progress" ? "in_progress" : "new",
     );
     responseMessages.push(buildRuntimeMessage("system", waitingPayload));
   }
@@ -1749,6 +1840,7 @@ export async function postGuestAiStarterToStore(
   });
 
   await addMessage(
+    stayStatus,
     threadId,
     "ai",
     aiPayload,
@@ -1803,6 +1895,7 @@ export async function postGuestAiMessageToStore(
   };
 
   await addMessage(
+    stayStatus,
     threadId,
     "ai",
     aiPayload,

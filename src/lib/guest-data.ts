@@ -199,12 +199,32 @@ function getSheetValue(
   const names = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
   const categories = asRecord(source.categories);
   const operations = asRecord((source as FirestoreHearingSheet).operations);
+  const readPath = (root: Record<string, unknown> | null | undefined, path: string) => {
+    if (!root) {
+      return undefined;
+    }
+
+    const segments = path.split(".");
+    let current: unknown = root;
+
+    for (const segment of segments) {
+      const record = asRecord(current);
+
+      if (!record || !(segment in record)) {
+        return undefined;
+      }
+
+      current = record[segment];
+    }
+
+    return current;
+  };
 
   for (const fieldName of names) {
     const value =
-      source[fieldName] ??
-      categories?.[fieldName] ??
-      operations?.[fieldName];
+      readPath(source, fieldName) ??
+      readPath(categories, fieldName) ??
+      readPath(operations, fieldName);
 
     if (value !== undefined && value !== null) {
       return value;
@@ -528,17 +548,22 @@ function parseKnowledgeFromSource(
       "breakfastEntries",
       "breakfast_entries",
       "breakfast",
+      "facilities.breakfastEntries",
+      "facilities.breakfast_entries",
     ])),
     baths: parseBathEntries(getSheetValue(source, [
       "bathEntries",
       "bath_entries",
       "baths",
       "bath",
+      "facilities.bathEntries",
+      "facilities.bath_entries",
     ])),
     facilities: parseFacilityEntries(getSheetValue(source, [
       "facilityEntries",
       "facility_entries",
       "facilities",
+      "facilities.entries",
     ])),
     facilityLocations: parseFacilityLocationEntries(
       getSheetValue(source, [
@@ -546,6 +571,8 @@ function parseKnowledgeFromSource(
         "facility_location_entries",
         "facilityLocations",
         "facility_locations",
+        "facilities.locationEntries",
+        "facilities.location_entries",
       ]),
     ),
     amenities: parseAmenityEntries(getSheetValue(source, [

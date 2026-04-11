@@ -57,7 +57,7 @@ export default async function Home({ searchParams }: HomePageProps) {
                 <span className="text-[#ad2218]">.</span>
               </div>
               <p className="mt-3 text-[15px] font-light leading-7 text-[#8f7567]">
-                Better way to reach your front desk
+                -泊まる人も、迎える人も、もっと心地よく-
               </p>
 
               <div className="mt-10 inline-flex items-center gap-2 rounded-full border border-[#e6d5ca] bg-white/70 px-4 py-2 text-[11px] tracking-[0.18em] text-[#ad2218] uppercase">

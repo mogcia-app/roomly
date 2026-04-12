@@ -410,7 +410,7 @@ function buildRichMenuGuideText(
     return `아래 퀵 메뉴에서도 ${joined} 항목을 열 수 있습니다.`;
   }
 
-  return `下のクイックメニューからも ${joined} を開けます。`;
+  return `下の館内メニューからも ${joined} を開けます。`;
 }
 
 function normalizeGuideText(value: string) {

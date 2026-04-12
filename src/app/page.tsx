@@ -33,14 +33,14 @@ export default async function Home({ searchParams }: HomePageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5efe8] text-[#2d211d]">
-      <main className="relative mx-auto flex min-h-screen w-full max-w-md items-center overflow-hidden px-5 py-6">
+    <div className="min-h-svh bg-[#f5efe8] text-[#2d211d] supports-[min-height:100dvh]:min-h-dvh">
+      <main className="relative mx-auto flex min-h-svh w-full max-w-md items-center overflow-hidden px-5 py-6 supports-[min-height:100dvh]:min-h-dvh">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-10 top-8 h-40 rounded-full bg-[#ad2218]/10 blur-3xl"
         />
         <section className="relative w-full overflow-hidden rounded-[38px] border border-[#e8dbd0] bg-[linear-gradient(180deg,#fbf7f2_0%,#f5efe8_100%)] px-7 pb-8 pt-6 shadow-[0_28px_80px_rgba(92,52,36,0.12)]">
-          <div className="relative flex min-h-[calc(100vh-8.5rem)] flex-col justify-between py-8">
+          <div className="relative flex min-h-[calc(100svh-8.5rem)] flex-col justify-between py-8 supports-[min-height:100dvh]:min-h-[calc(100dvh-8.5rem)]">
             <div className="pt-6 text-center">
               <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-[30px] bg-white/85 shadow-[0_18px_45px_rgba(173,34,24,0.08)] ring-1 ring-[#ead9ce] backdrop-blur-sm">
                 <Image
@@ -56,7 +56,7 @@ export default async function Home({ searchParams }: HomePageProps) {
                 <span>Roomly</span>
                 <span className="text-[#ad2218]">.</span>
               </div>
-              <p className="mt-3 text-[15px] font-light leading-7 text-[#8f7567]">
+              <p className="mt-3 text-[13px] font-light leading-6 text-[#8f7567] sm:text-[14px]">
                 -泊まる人も、迎える人も、もっと心地よく-
               </p>
 

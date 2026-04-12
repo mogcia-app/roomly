@@ -70,7 +70,7 @@ export function GuestLanguageForm({
           言語を選択してください
         </h1>
         <p className="mx-auto mt-2 max-w-[18rem] text-[13px] font-light leading-6 text-[#8f8078]">
-          選択後すぐにフロントとのチャットを開始できます
+          選択後すぐにチャットを開始できます
         </p>
       </div>
 

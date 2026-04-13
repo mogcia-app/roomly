@@ -136,10 +136,6 @@ function formatTimeLabel(timestamp: string | null, language: GuestLanguage) {
   }).format(new Date(timestamp));
 }
 
-function shouldShowReadLabel(message: DisplayMessage) {
-  return message.sender === "guest" && !message.optimistic && Boolean(message.isRead || message.readAt);
-}
-
 function formatMessageBody(body: string) {
   return body
     .replace(/ご利用日\s*時/g, "ご利用日時")
@@ -147,72 +143,131 @@ function formatMessageBody(body: string) {
     .replace(/を記載して\s*ください/g, "を記載してください");
 }
 
-type TransportCard = {
+type GuideCard = {
   title: string;
   subtitle?: string;
   fields: Array<{ label: string; value: string }>;
+  notes?: string[];
 };
 
-function parseTransportCards(body: string): TransportCard[] | null {
+const GUIDE_CARD_FIELD_LABELS = new Set([
+  "電話",
+  "対応時間",
+  "料金",
+  "営業時間",
+  "利用時間",
+  "場所",
+  "方法",
+  "依頼方法",
+  "注文方法",
+  "時間",
+  "台数",
+  "予約",
+  "SSID",
+  "PASS",
+  "連絡先",
+  "手順",
+  "鍵の返却",
+  "レイトチェックアウト",
+  "距離",
+]);
+
+function parseGuideCards(body: string): GuideCard[] | null {
   const normalizedBody = formatMessageBody(body);
   const lines = normalizedBody
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (lines.length < 2) {
+  if (lines.length === 0 || (!normalizedBody.includes("\n") && !normalizedBody.includes(" / "))) {
     return null;
   }
 
-  const cards: TransportCard[] = [];
-  let current: TransportCard | null = null;
-  let hasKnownTransportField = false;
+  const segments = lines.flatMap((line) =>
+    line
+      .split(/\s\/\s/)
+      .map((segment) => segment.trim())
+      .filter(Boolean),
+  );
 
-  for (const line of lines) {
-    const separatorIndex = line.indexOf(":");
+  const cards: GuideCard[] = [];
+  let current: GuideCard | null = null;
+  let structuredSegmentCount = 0;
+
+  for (const segment of segments) {
+    const separatorIndex = segment.indexOf(":");
 
     if (separatorIndex < 0) {
-      if (current) {
-        cards.push(current);
+      if (!current) {
+        current = {
+          title: segment,
+          fields: [],
+          notes: [],
+        };
+        continue;
       }
 
-      const [title, subtitle] = line.split("/").map((part) => part.trim()).filter(Boolean);
-      current = {
-        title: title ?? line,
-        subtitle,
-        fields: [],
-      };
+      if (!current.title) {
+        current.title = segment;
+        continue;
+      }
+
+      if (current.fields.length > 0) {
+        cards.push(current);
+        current = {
+          title: segment,
+          fields: [],
+          notes: [],
+        };
+        structuredSegmentCount += 1;
+        continue;
+      }
+
+      current.notes = [...(current.notes ?? []), segment];
+      structuredSegmentCount += 1;
       continue;
     }
 
-    const label = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
+    const label = segment.slice(0, separatorIndex).trim();
+    const value = segment.slice(separatorIndex + 1).trim();
+    const isStructuredField = GUIDE_CARD_FIELD_LABELS.has(label) || label.length <= 10;
+
+    if (!isStructuredField) {
+      if (!current) {
+        current = {
+          title: segment,
+          fields: [],
+          notes: [],
+        };
+      } else {
+        current.notes = [...(current.notes ?? []), segment];
+      }
+      continue;
+    }
 
     if (!current) {
       current = {
         title: "",
         fields: [],
+        notes: [],
       };
     }
 
     current.fields.push({ label, value });
-
-    if (["電話", "対応時間", "料金"].includes(label)) {
-      hasKnownTransportField = true;
-    }
+    structuredSegmentCount += 1;
   }
 
   if (current) {
     cards.push(current);
   }
 
-  const validCards = cards.filter((card) => card.title && card.fields.length > 0);
+  const validCards = cards.filter((card) => card.title && (card.fields.length > 0 || (card.notes?.length ?? 0) > 0));
 
-  return hasKnownTransportField && validCards.length > 0 ? validCards : null;
+  return structuredSegmentCount >= 2 && validCards.length > 0 ? validCards : null;
 }
 
 function renderMessageBody(message: DisplayMessage) {
-  const transportCards = message.body ? parseTransportCards(message.body) : null;
+  const guideCards = message.body ? parseGuideCards(message.body) : null;
 
   return (
     <div className="space-y-3">
@@ -224,9 +279,9 @@ function renderMessageBody(message: DisplayMessage) {
         />
       ) : null}
       {message.body ? (
-        transportCards ? (
+        guideCards ? (
           <div className="space-y-3">
-            {transportCards.map((card, index) => (
+            {guideCards.map((card, index) => (
               <div
                 key={`${card.title}-${index}`}
                 className="rounded-[18px] border border-[#eadfd8] bg-[#fcf8f4] p-3"
@@ -247,6 +302,11 @@ function renderMessageBody(message: DisplayMessage) {
                     >
                       <div className="text-[#8b776e]">{field.label}</div>
                       <div className="text-[#33231e]">{field.value}</div>
+                    </div>
+                  ))}
+                  {card.notes?.map((note) => (
+                    <div key={`${card.title}-${note}`} className="text-[13px] leading-5 text-[#5f463d]">
+                      {note}
                     </div>
                   ))}
                 </div>
@@ -938,30 +998,6 @@ function GuestChatInput({
       ok: response.ok,
       threadId: payload?.threadId ?? null,
       mode: payload?.mode ?? nextMode,
-      messages: (payload?.messages ?? []) as GuestMessage[],
-    };
-  }
-
-  async function postAiStarterMessage(body: string) {
-    const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        body,
-        mode: "ai",
-        kind: "ai_starter",
-      }),
-    });
-
-    const payload = response.ok
-      ? await response.json() as { threadId?: string; messages?: GuestMessage[] }
-      : null;
-
-    return {
-      ok: response.ok,
-      threadId: payload?.threadId ?? null,
       messages: (payload?.messages ?? []) as GuestMessage[],
     };
   }
@@ -1671,18 +1707,10 @@ export function GuestChatExperience({
 
     return messages;
   }, [activeMode, hasGuestMessage, messages]);
-  const hasPendingGuestReadReceipt = messages.some(
-    (message) => message.sender === "guest" && !message.optimistic && !message.isRead && !message.readAt,
-  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [visibleMessages]);
-
-  useEffect(() => {
-    setActiveMode(mode);
-    setChatMessages(initialMessages);
-  }, [initialMessages, mode]);
 
   useEffect(() => {
     if (!clearThreadQueryOnMount) {
@@ -1691,46 +1719,6 @@ export function GuestChatExperience({
 
     router.replace(`/guest/${roomId}/chat?mode=${activeMode}`, { scroll: false });
   }, [activeMode, clearThreadQueryOnMount, roomId, router]);
-
-  useEffect(() => {
-    if (!hasPendingGuestReadReceipt) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const syncMessages = async () => {
-      const response = await fetch(
-        `/api/guest/rooms/${roomId}/messages?mode=${encodeURIComponent(activeMode)}`,
-        { method: "GET", cache: "no-store" },
-      );
-
-      if (!response.ok || cancelled) {
-        return;
-      }
-
-      const payload = await response.json() as { messages?: GuestMessage[] };
-      const serverMessages = (payload.messages ?? []).map((message) => ({
-        ...message,
-        optimistic: false,
-      }));
-
-      setChatMessages((current) => {
-        const optimisticMessages = current.filter((message) => message.optimistic);
-        return [...serverMessages, ...optimisticMessages];
-      });
-    };
-
-    void syncMessages();
-    const intervalId = window.setInterval(() => {
-      void syncMessages();
-    }, 10000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [activeMode, hasPendingGuestReadReceipt, roomId]);
 
   const appendMessages = (newMessages: DisplayMessage[]) => {
     if (newMessages.length === 0) {
@@ -1811,8 +1799,6 @@ export function GuestChatExperience({
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
                         {message.optimistic ? (
                           <span className="ml-2 font-light">{ui.sendingLabel}</span>
-                        ) : shouldShowReadLabel(message) ? (
-                          <span className="ml-2 font-light">{ui.readLabel}</span>
                         ) : null}
                       </div>
                     </div>
@@ -1862,10 +1848,12 @@ export function GuestChatExperience({
           {activeMode === "ai" && hasGuestMessage ? (
             <GuestActionPanel
               roomId={roomId}
+              roomLabel={roomLabel}
               language={language}
               knowledge={knowledge}
               richMenu={richMenu}
               prompts={prompts}
+              showIntro
               onModeChange={setActiveMode}
               onMessagesReplace={replaceOptimisticMessage}
               onOptimisticRemove={removeOptimisticMessage}

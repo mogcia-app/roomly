@@ -7,7 +7,7 @@ import {
   isGuestLanguage,
   type GuestLanguage,
 } from "@/lib/guest-demo";
-import { getGuestMessagesFromStore } from "@/lib/guest-chat-data";
+import { getGuestThreadStateFromStore } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getGuestLanguageCookieName } from "@/lib/guest-language-cookie";
 import { getGuestRichMenuByHotelId } from "@/lib/guest-rich-menu";
@@ -148,8 +148,8 @@ export default async function GuestChatPage({
         knowledgeCounts: summarizeKnowledgeCounts(room.hearingSheetKnowledge),
       }
     : null;
-  const [thread, richMenu] = await Promise.all([
-    getGuestMessagesFromStore(room, currentMode, threadId ?? null),
+  const [threadState, richMenu] = await Promise.all([
+    getGuestThreadStateFromStore(room, currentMode, threadId ?? null),
     getGuestRichMenuByHotelId(room.hotelId),
   ]);
 
@@ -203,7 +203,7 @@ export default async function GuestChatPage({
         </header>
 
         <GuestChatExperience
-          key={`${currentMode}:${thread.at(-1)?.id ?? "empty"}:${thread.length}`}
+          key={`${currentMode}:${threadState.messages.at(-1)?.id ?? "empty"}:${threadState.messages.length}`}
           roomId={access.accessToken}
           hotelName={room.hotelName}
           roomLabel={room.roomLabel}
@@ -212,7 +212,7 @@ export default async function GuestChatPage({
           mode={currentMode}
           knowledge={room.hearingSheetKnowledge}
           prompts={room.hearingSheetPrompts}
-          initialMessages={thread}
+          initialMessages={threadState.messages}
           clearThreadQueryOnMount={Boolean(threadId)}
           debugInfo={debugInfo}
         />

@@ -1,6 +1,7 @@
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import {
+  getGuestThreadStateFromStore,
   postGuestAiMessageToStore,
   postGuestAiStarterToStore,
   postGuestMessageToStore,
@@ -10,6 +11,8 @@ import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
 
+type ManualTranslationsPayload = Partial<Record<"ja" | "en" | "zh-CN" | "zh-TW" | "ko", string>>;
+
 type GuestMessagePayload = {
   body?: string;
   guestLanguage?: string;
@@ -18,7 +21,55 @@ type GuestMessagePayload = {
   category?: string;
   mode?: "ai" | "human";
   kind?: "guest_message" | "ai_starter" | "ai_message";
+  protectedTerms?: string[];
+  translations?: ManualTranslationsPayload;
 };
+
+export async function GET(
+  request: Request,
+  context: RouteContext<"/api/guest/rooms/[roomId]/messages">,
+) {
+  try {
+    const { roomId: accessToken } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const mode = searchParams.get("mode") === "human" ? "human" : "ai";
+    let access;
+
+    try {
+      access = await resolveGuestAccess(accessToken);
+    } catch {
+      return Response.json({ error: "INVALID_ROOM_TOKEN" }, { status: 401 });
+    }
+
+    if (!access) {
+      return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
+    }
+
+    const storedLanguage = await getStoredGuestLanguage(access.accessToken);
+    const stayStatus = await getGuestActiveStayStatusFromStore(
+      access.roomId,
+      storedLanguage,
+      access.hotelId,
+    );
+
+    if (!stayStatus) {
+      return Response.json({ error: "ACTIVE_STAY_NOT_FOUND" }, { status: 409 });
+    }
+
+    const threadState = await getGuestThreadStateFromStore(stayStatus, mode);
+
+    return Response.json({
+      ok: true,
+      mode,
+      threadId: threadState.threadId,
+      messages: threadState.messages,
+    });
+  } catch (error) {
+    console.error("[guest/messages:get] failed", { error });
+
+    return Response.json({ error: "MESSAGE_FETCH_FAILED" }, { status: 500 });
+  }
+}
 
 export async function POST(
   request: Request,
@@ -49,6 +100,9 @@ export async function POST(
     const requestedLanguage = isGuestLanguage(payload.guestLanguage)
       ? payload.guestLanguage
       : null;
+    const protectedTerms = Array.isArray(payload.protectedTerms)
+      ? payload.protectedTerms.filter((term): term is string => typeof term === "string" && term.trim().length > 0)
+      : undefined;
     const stayStatus = await getGuestActiveStayStatusFromStore(
       access.roomId,
       storedLanguage ?? requestedLanguage,
@@ -60,7 +114,10 @@ export async function POST(
     }
 
     const result = payload.kind === "ai_starter"
-      ? await postGuestAiStarterToStore(stayStatus, payload.body ?? "")
+      ? await postGuestAiStarterToStore(stayStatus, payload.body ?? "", {
+          protectedTerms,
+          translations: payload.translations,
+        })
       : payload.kind === "ai_message"
         ? await postGuestAiMessageToStore(
             stayStatus,
@@ -68,6 +125,10 @@ export async function POST(
             payload.imageUrl,
             payload.imageAlt,
             payload.category,
+            {
+              protectedTerms,
+              translations: payload.translations,
+            },
           )
         : await postGuestMessageToStore(stayStatus, mode, payload.body ?? "");
 

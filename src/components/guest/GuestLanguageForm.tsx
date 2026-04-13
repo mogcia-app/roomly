@@ -67,10 +67,10 @@ export function GuestLanguageForm({
           </p>
         ) : null}
         <h1 className="mt-3 text-[1.65rem] font-light tracking-[-0.04em] text-[#171a22]">
-          言語を選択してください
+          言語を選択してください / Please select your language
         </h1>
         <p className="mx-auto mt-2 max-w-[18rem] text-[13px] font-light leading-6 text-[#8f8078]">
-          選択後すぐにチャットを開始できます
+          選択後すぐにチャットを開始できます / You can start chatting right away.
         </p>
       </div>
 
@@ -84,7 +84,7 @@ export function GuestLanguageForm({
 
       <div className="mt-6">
         <div className="mb-2 text-[10px] font-light uppercase tracking-[0.22em] text-[#9a8b83]">
-          Language
+          Language / 言語
         </div>
         <div className="relative border border-[#ddd2cc] bg-white p-1.5">
           <select
@@ -97,7 +97,7 @@ export function GuestLanguageForm({
             className="h-[58px] w-full appearance-none border border-transparent bg-white px-5 pr-14 text-[16px] font-light tracking-[0.01em] text-[#171a22] outline-none transition focus:border-[#e3d7d1]"
           >
             <option value="" disabled>
-              言語を選択してください
+              言語を選択してください / Please select
             </option>
             {languages.map((language) => (
               <option key={language} value={language}>

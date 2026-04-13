@@ -13,6 +13,8 @@ import {
 } from "@/lib/guest-contract";
 import type { GuestLanguage } from "@/lib/guest-demo";
 
+type GuestRichMenuTranslations = Partial<Record<GuestLanguage, string>>;
+
 export type GuestRichMenuItem = {
   id: string;
   label: string;
@@ -30,6 +32,8 @@ export type GuestRichMenuItem = {
   messageImageAlt?: string;
   handoffCategory?: string;
   languageCode?: GuestLanguage;
+  protectedTerms?: string[];
+  translations?: GuestRichMenuTranslations;
 };
 
 export type GuestRichMenu = {
@@ -38,6 +42,7 @@ export type GuestRichMenu = {
   imageWidth: number;
   imageHeight: number;
   menuGuideText?: string;
+  translationProtectedTerms?: string[];
   items: GuestRichMenuItem[];
 };
 
@@ -58,6 +63,8 @@ type FirestoreGuestRichMenuItem = {
   messageImageAlt?: unknown;
   handoffCategory?: unknown;
   languageCode?: unknown;
+  protectedTerms?: unknown;
+  translations?: unknown;
 };
 
 type FirestoreGuestRichMenu = {
@@ -66,6 +73,7 @@ type FirestoreGuestRichMenu = {
   imageWidth?: unknown;
   imageHeight?: unknown;
   menuGuideText?: unknown;
+  translationProtectedTerms?: unknown;
   items?: unknown;
 };
 
@@ -75,6 +83,39 @@ function readNumber(value: unknown) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => readString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+function readTranslations(value: unknown): GuestRichMenuTranslations | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value).flatMap(([language, text]) => {
+    if (
+      (language === "ja" || language === "en" || language === "zh-CN" || language === "zh-TW" || language === "ko") &&
+      readString(text)
+    ) {
+      return [[language, readString(text)] as const];
+    }
+
+    return [];
+  });
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(entries) as GuestRichMenuTranslations;
 }
 
 function normalizeItem(value: unknown): GuestRichMenuItem | null {
@@ -133,6 +174,8 @@ function normalizeItem(value: unknown): GuestRichMenuItem | null {
     languageCode: isGuestRichMenuActionLanguageCode(item.languageCode)
       ? item.languageCode
       : undefined,
+    protectedTerms: readStringArray(item.protectedTerms),
+    translations: readTranslations(item.translations),
   };
 }
 
@@ -166,6 +209,7 @@ function normalizeGuestRichMenu(value: FirestoreGuestRichMenu | null): GuestRich
     imageWidth,
     imageHeight,
     menuGuideText: readString(value.menuGuideText) ?? undefined,
+    translationProtectedTerms: readStringArray(value.translationProtectedTerms),
     items,
   };
 }

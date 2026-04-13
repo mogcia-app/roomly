@@ -72,6 +72,12 @@ type FirestoreMessage = {
   translated_body_guest?: string | null;
   translated_language_guest?: string | null;
   translation_state?: GuestTranslationState;
+  read_at_guest?: { toDate?: () => Date } | string | null;
+  readAtGuest?: { toDate?: () => Date } | string | null;
+  read_at?: { toDate?: () => Date } | string | null;
+  readAt?: { toDate?: () => Date } | string | null;
+  seen_at_guest?: { toDate?: () => Date } | string | null;
+  seenAtGuest?: { toDate?: () => Date } | string | null;
   timestamp?: { toDate?: () => Date } | unknown;
 };
 
@@ -92,6 +98,8 @@ type TranslationPayload = {
 type OpenAiTranslationResponse = {
   translated_text?: string;
 };
+
+type ManualTranslations = Partial<Record<GuestLanguage, string>>;
 
 function resolveGuestLanguage(language: GuestLanguage | null | undefined) {
   return language ?? "ja";
@@ -131,10 +139,12 @@ async function translateTextWithOpenAi({
   text,
   sourceLanguage,
   targetLanguage,
+  protectedTerms,
 }: {
   text: string;
   sourceLanguage: string | null;
   targetLanguage: string;
+  protectedTerms?: string[];
 }) {
   const apiKey = getOpenAiApiKey();
 
@@ -165,9 +175,12 @@ async function translateTextWithOpenAi({
                 `Source language: ${sourceLanguage ?? "auto-detect"}`,
                 `Target language: ${targetLanguage}`,
                 "Task: translate the following hotel chat message faithfully.",
+                protectedTerms && protectedTerms.length > 0
+                  ? `Do not translate or alter these terms: ${protectedTerms.join(", ")}`
+                  : null,
                 "If the source text is already in the target language, return it unchanged.",
                 `Text: ${text}`,
-              ].join("\n"),
+              ].filter((line): line is string => Boolean(line)).join("\n"),
             },
           ],
         },
@@ -238,6 +251,8 @@ async function buildTranslationPayload({
   displayLanguage,
   guestLanguage,
   frontLanguage,
+  protectedTerms,
+  manualTranslations,
 }: {
   displayBody: string;
   originalBody?: string;
@@ -245,22 +260,36 @@ async function buildTranslationPayload({
   displayLanguage?: string | null;
   guestLanguage: GuestLanguage | null | undefined;
   frontLanguage?: string | null;
+  protectedTerms?: string[];
+  manualTranslations?: ManualTranslations;
   }): Promise<TranslationPayload> {
   const resolvedGuestLanguage = toLanguageCode(guestLanguage);
   const resolvedFrontLanguage = frontLanguage ?? GUEST_FRONT_DESK_LANGUAGE;
   const sourceBody = originalBody?.trim() || displayBody;
   const sourceLanguage = originalLanguage ?? resolvedGuestLanguage;
   const resolvedDisplayLanguage = displayLanguage ?? sourceLanguage;
+  const shouldDisplayGuestTranslation = resolvedDisplayLanguage === resolvedGuestLanguage;
+  const manualGuestTranslation =
+    guestLanguage && manualTranslations?.[guestLanguage]?.trim()
+      ? manualTranslations[guestLanguage]?.trim() ?? null
+      : null;
+  const toGuestVisibleBody = (translatedGuestBody: string | null, fallbackBody: string) =>
+    shouldDisplayGuestTranslation ? translatedGuestBody ?? fallbackBody : fallbackBody;
 
   if (!getOpenAiApiKey()) {
     console.warn("[guest/translation] OPENAI_API_KEY missing, using fallback translation");
+    const fallbackGuestBody =
+      resolvedDisplayLanguage === resolvedGuestLanguage && sourceLanguage === resolvedGuestLanguage
+        ? sourceBody
+        : displayBody;
+
     return {
-      body: displayBody,
+      body: fallbackGuestBody,
       originalBody: sourceBody,
       originalLanguage: sourceLanguage,
       translatedBodyFront: sourceBody,
       translatedLanguageFront: resolvedFrontLanguage,
-      translatedBodyGuest: displayBody,
+      translatedBodyGuest: fallbackGuestBody,
       translatedLanguageGuest: resolvedGuestLanguage,
       translationState:
         sourceLanguage === resolvedGuestLanguage && sourceLanguage === resolvedFrontLanguage
@@ -277,26 +306,39 @@ async function buildTranslationPayload({
             text: sourceBody,
             sourceLanguage,
             targetLanguage: resolvedFrontLanguage,
+            protectedTerms,
           });
 
     const translatedBodyGuest =
-      resolvedDisplayLanguage === resolvedGuestLanguage
-        ? displayBody
+      manualGuestTranslation
+        ? manualGuestTranslation
+        : resolvedDisplayLanguage === resolvedGuestLanguage
+        ? sourceLanguage === resolvedGuestLanguage
+          ? sourceBody
+          : await translateTextWithOpenAi({
+              text: sourceBody,
+              sourceLanguage,
+              targetLanguage: resolvedGuestLanguage,
+              protectedTerms,
+            })
         : sourceLanguage === resolvedGuestLanguage
           ? sourceBody
           : await translateTextWithOpenAi({
               text: sourceBody,
               sourceLanguage,
               targetLanguage: resolvedGuestLanguage,
+              protectedTerms,
             });
 
+    const guestVisibleBody = toGuestVisibleBody(translatedBodyGuest, displayBody);
+
     return {
-      body: displayBody,
+      body: guestVisibleBody,
       originalBody: sourceBody,
       originalLanguage: sourceLanguage,
       translatedBodyFront: translatedBodyFront ?? sourceBody,
       translatedLanguageFront: resolvedFrontLanguage,
-      translatedBodyGuest: translatedBodyGuest ?? displayBody,
+      translatedBodyGuest: translatedBodyGuest ?? guestVisibleBody,
       translatedLanguageGuest: resolvedGuestLanguage,
       translationState:
         translatedBodyFront || translatedBodyGuest ? "ready" : "fallback",
@@ -310,12 +352,12 @@ async function buildTranslationPayload({
       error,
     });
     return {
-      body: displayBody,
+      body: toGuestVisibleBody(displayBody, displayBody),
       originalBody: sourceBody,
       originalLanguage: sourceLanguage,
       translatedBodyFront: sourceBody,
       translatedLanguageFront: resolvedFrontLanguage,
-      translatedBodyGuest: displayBody,
+      translatedBodyGuest: toGuestVisibleBody(displayBody, displayBody),
       translatedLanguageGuest: resolvedGuestLanguage,
       translationState: "fallback",
     };
@@ -346,6 +388,25 @@ function normalizeMessage(
       ? message.timestamp.toDate().toISOString()
       : null;
 
+  const readAtSource =
+    message.read_at_guest ??
+    message.readAtGuest ??
+    message.read_at ??
+    message.readAt ??
+    message.seen_at_guest ??
+    message.seenAtGuest ??
+    null;
+
+  const readAt =
+    typeof readAtSource === "object" &&
+    readAtSource !== null &&
+    "toDate" in readAtSource &&
+    typeof readAtSource.toDate === "function"
+      ? readAtSource.toDate().toISOString()
+      : typeof readAtSource === "string" && readAtSource.trim()
+        ? readAtSource
+        : null;
+
   return {
     id,
     sender: message.sender,
@@ -353,6 +414,8 @@ function normalizeMessage(
     imageUrl: message.image_url ?? null,
     imageAlt: message.image_alt ?? null,
     timestamp,
+    readAt,
+    isRead: Boolean(readAt),
     originalBody: message.original_body ?? null,
     originalLanguage: message.original_language ?? null,
     translatedBodyFront: message.translated_body_front ?? null,
@@ -374,6 +437,8 @@ function buildRuntimeMessage(
     imageUrl: payload.imageUrl ?? null,
     imageAlt: payload.imageAlt ?? null,
     timestamp: new Date().toISOString(),
+    readAt: null,
+    isRead: false,
     originalBody: payload.originalBody,
     originalLanguage: payload.originalLanguage,
     translatedBodyFront: payload.translatedBodyFront,
@@ -921,6 +986,10 @@ function compactParts(values: Array<string | null | undefined>) {
   return values.filter((value): value is string => Boolean(value && value.trim()));
 }
 
+function compactLines(values: Array<string | null | undefined>) {
+  return compactParts(values).join("\n");
+}
+
 function takeFormatted(values: string[]) {
   return values.slice(0, 2).join("\n");
 }
@@ -1169,14 +1238,13 @@ function formatRoomServiceEntry(entry: StructuredKnowledge["roomService"][number
 }
 
 function formatTransportEntry(entry: StructuredKnowledge["transport"][number]) {
-  return compactParts([
-    entry.companyName,
-    entry.serviceType,
+  return compactLines([
+    compactParts([entry.companyName, entry.serviceType]).join(" / "),
     entry.phone ? `電話: ${entry.phone}` : null,
     entry.hours ? `対応時間: ${entry.hours}` : null,
     entry.priceNote ? `料金: ${entry.priceNote}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatNearbySpotEntry(entry: StructuredKnowledge["nearbySpots"][number]) {
@@ -1610,6 +1678,114 @@ export async function getGuestMessagesFromStore(
   }
 }
 
+export async function getGuestThreadStateFromStore(
+  stayStatus: GuestStayStatus,
+  mode: ThreadMode,
+  threadId?: string | null,
+) {
+  const fallbackMessages = buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
+
+  if (!hasFirebaseAdminCredentials()) {
+    return {
+      threadId: threadId ?? `demo-${mode}`,
+      messages: fallbackMessages,
+    };
+  }
+
+  try {
+    const resolvedThreadId =
+      threadId ??
+      (await findThread(stayStatus, mode))?.id ??
+      null;
+
+    if (!resolvedThreadId) {
+      return {
+        threadId: null,
+        messages: fallbackMessages,
+      };
+    }
+
+    const messages = await getMessagesByThreadId(resolvedThreadId);
+
+    return {
+      threadId: resolvedThreadId,
+      messages: messages.length > 0 ? messages : fallbackMessages,
+    };
+  } catch {
+    return {
+      threadId: threadId ?? null,
+      messages: fallbackMessages,
+    };
+  }
+}
+
+export async function markGuestThreadMessagesRead(
+  threadId: string,
+  messageIds?: string[],
+) {
+  if (!hasFirebaseAdminCredentials()) {
+    return { ok: true as const, updatedCount: 0 };
+  }
+
+  const db = getAdminDb();
+  const directSnapshot = await db
+    .collection("messages")
+    .where("thread_id", "==", threadId)
+    .get();
+
+  const snapshot = directSnapshot.empty
+    ? await db
+        .collection("messages")
+        .where("threadId", "==", threadId)
+        .get()
+    : directSnapshot;
+
+  const targetIds = messageIds?.length ? new Set(messageIds) : null;
+  const docsToUpdate = snapshot.docs.filter((docSnapshot) => {
+    const data = docSnapshot.data() as FirestoreMessage;
+    const alreadyRead =
+      data.read_at_guest ??
+      data.readAtGuest ??
+      data.read_at ??
+      data.readAt ??
+      data.seen_at_guest ??
+      data.seenAtGuest;
+
+    if (data.sender !== "guest" || alreadyRead) {
+      return false;
+    }
+
+    if (targetIds && !targetIds.has(docSnapshot.id)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (docsToUpdate.length === 0) {
+    return { ok: true as const, updatedCount: 0 };
+  }
+
+  const batch = db.batch();
+
+  for (const docSnapshot of docsToUpdate) {
+    batch.set(
+      docSnapshot.ref,
+      {
+        read_at_guest: FieldValue.serverTimestamp(),
+      } as { read_at_guest: unknown },
+      { merge: true },
+    );
+  }
+
+  await batch.commit();
+
+  return {
+    ok: true as const,
+    updatedCount: docsToUpdate.length,
+  };
+}
+
 export async function requestHumanHandoff(
   stayStatus: GuestStayStatus,
   category?: string,
@@ -1814,6 +1990,10 @@ export async function postGuestMessageToStore(
 export async function postGuestAiStarterToStore(
   stayStatus: GuestStayStatus,
   body: string,
+  options?: {
+    protectedTerms?: string[];
+    translations?: ManualTranslations;
+  },
 ) {
   const trimmedBody = body.trim();
 
@@ -1837,6 +2017,8 @@ export async function postGuestAiStarterToStore(
     originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
     displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
     frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    protectedTerms: options?.protectedTerms,
+    manualTranslations: options?.translations,
   });
 
   await addMessage(
@@ -1862,6 +2044,10 @@ export async function postGuestAiMessageToStore(
   imageUrl?: string,
   imageAlt?: string,
   category?: string,
+  options?: {
+    protectedTerms?: string[];
+    translations?: ManualTranslations;
+  },
 ) {
   const trimmedBody = body?.trim() ?? "";
   const trimmedImageUrl = imageUrl?.trim() ?? "";
@@ -1881,18 +2067,18 @@ export async function postGuestAiMessageToStore(
   }
 
   const threadId = await ensureThread(stayStatus, "ai");
-  const aiPayload: TranslationPayload = {
-    body: trimmedBody,
-    imageUrl: trimmedImageUrl || null,
-    imageAlt: trimmedImageAlt || null,
-    originalBody: trimmedBody,
-    originalLanguage: toLanguageCode(stayStatus.selectedLanguage),
-    translatedBodyFront: trimmedBody || null,
-    translatedLanguageFront: GUEST_FRONT_DESK_LANGUAGE,
-    translatedBodyGuest: trimmedBody || null,
-    translatedLanguageGuest: toLanguageCode(stayStatus.selectedLanguage),
-    translationState: "not_required",
-  };
+  const aiPayload = await buildTranslationPayload({
+    displayBody: trimmedBody,
+    guestLanguage: stayStatus.selectedLanguage,
+    originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+    frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    protectedTerms: options?.protectedTerms,
+    manualTranslations: options?.translations,
+  });
+
+  aiPayload.imageUrl = trimmedImageUrl || null;
+  aiPayload.imageAlt = trimmedImageAlt || null;
 
   await addMessage(
     stayStatus,

@@ -67,7 +67,7 @@ type GuestActionPanelProps = {
   prompts: string[];
   showIntro?: boolean;
   onModeChange: (mode: "ai" | "human") => void;
-  onMessagesAppend: (messages: DisplayMessage[]) => void;
+  onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
   onOptimisticRemove: (messageId: string) => void;
   onOptimisticSend: (message: DisplayMessage) => void;
 };
@@ -136,6 +136,10 @@ function formatTimeLabel(timestamp: string | null, language: GuestLanguage) {
   }).format(new Date(timestamp));
 }
 
+function shouldShowReadLabel(message: DisplayMessage) {
+  return message.sender === "guest" && !message.optimistic && Boolean(message.isRead || message.readAt);
+}
+
 function formatMessageBody(body: string) {
   return body
     .replace(/ご利用日\s*時/g, "ご利用日時")
@@ -143,7 +147,73 @@ function formatMessageBody(body: string) {
     .replace(/を記載して\s*ください/g, "を記載してください");
 }
 
+type TransportCard = {
+  title: string;
+  subtitle?: string;
+  fields: Array<{ label: string; value: string }>;
+};
+
+function parseTransportCards(body: string): TransportCard[] | null {
+  const normalizedBody = formatMessageBody(body);
+  const lines = normalizedBody
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    return null;
+  }
+
+  const cards: TransportCard[] = [];
+  let current: TransportCard | null = null;
+  let hasKnownTransportField = false;
+
+  for (const line of lines) {
+    const separatorIndex = line.indexOf(":");
+
+    if (separatorIndex < 0) {
+      if (current) {
+        cards.push(current);
+      }
+
+      const [title, subtitle] = line.split("/").map((part) => part.trim()).filter(Boolean);
+      current = {
+        title: title ?? line,
+        subtitle,
+        fields: [],
+      };
+      continue;
+    }
+
+    const label = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim();
+
+    if (!current) {
+      current = {
+        title: "",
+        fields: [],
+      };
+    }
+
+    current.fields.push({ label, value });
+
+    if (["電話", "対応時間", "料金"].includes(label)) {
+      hasKnownTransportField = true;
+    }
+  }
+
+  if (current) {
+    cards.push(current);
+  }
+
+  const validCards = cards.filter((card) => card.title && card.fields.length > 0);
+
+  return hasKnownTransportField && validCards.length > 0 ? validCards : null;
+}
+
 function renderMessageBody(message: DisplayMessage) {
+  const transportCards = message.body ? parseTransportCards(message.body) : null;
+
   return (
     <div className="space-y-3">
       {message.imageUrl ? (
@@ -154,7 +224,38 @@ function renderMessageBody(message: DisplayMessage) {
         />
       ) : null}
       {message.body ? (
-        <div className="whitespace-pre-line">{formatMessageBody(message.body)}</div>
+        transportCards ? (
+          <div className="space-y-3">
+            {transportCards.map((card, index) => (
+              <div
+                key={`${card.title}-${index}`}
+                className="rounded-[18px] border border-[#eadfd8] bg-[#fcf8f4] p-3"
+              >
+                <div className="flex items-start justify-between gap-3 border-b border-[#efe4dd] pb-2">
+                  <div>
+                    <div className="text-[14px] font-medium text-[#33231e]">{card.title}</div>
+                    {card.subtitle ? (
+                      <div className="mt-0.5 text-[12px] text-[#8b776e]">{card.subtitle}</div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {card.fields.map((field) => (
+                    <div
+                      key={`${card.title}-${field.label}`}
+                      className="grid grid-cols-[72px_1fr] gap-3 text-[13px] leading-5"
+                    >
+                      <div className="text-[#8b776e]">{field.label}</div>
+                      <div className="text-[#33231e]">{field.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="whitespace-pre-line">{formatMessageBody(message.body)}</div>
+        )
       ) : null}
     </div>
   );
@@ -523,6 +624,105 @@ function localizeSupplementalPrompt(language: GuestLanguage, prompt: string) {
   return `${translatedPrefix}: ${suffix}`;
 }
 
+function getLocalizedGuidePrompt(
+  language: GuestLanguage,
+  key: AiGuideOption["key"],
+  bathName?: string,
+) : string {
+  if (language === "en") {
+    const prompts: Record<AiGuideOption["key"], string> = {
+      wifi: "Please tell me about Wi-Fi.",
+      breakfast: "Please tell me about breakfast.",
+      bath: bathName ? `Please tell me about ${bathName}.` : "Please tell me about the bath.",
+      facility: "Please tell me about the hotel facilities.",
+      amenity: "Please tell me about the amenities.",
+      parking: "Please tell me about parking.",
+      checkout: "Please tell me about checkout.",
+      emergency: "Please tell me about emergency information.",
+      roomService: "Please tell me about room service.",
+      transport: "Please tell me about transportation.",
+      nearby: "Please tell me about nearby spots.",
+      frontDesk: "Please tell me the front desk hours.",
+    };
+
+    return prompts[key];
+  }
+
+  if (language === "zh-CN") {
+    const prompts: Record<AiGuideOption["key"], string> = {
+      wifi: "请告诉我 Wi-Fi 信息。",
+      breakfast: "请告诉我早餐信息。",
+      bath: bathName ? `请告诉我关于${bathName}的信息。` : "请告诉我浴场信息。",
+      facility: "请告诉我馆内设施信息。",
+      amenity: "请告诉我备品信息。",
+      parking: "请告诉我停车场信息。",
+      checkout: "请告诉我退房信息。",
+      emergency: "请告诉我紧急情况说明。",
+      roomService: "请告诉我客房服务信息。",
+      transport: "请告诉我交通信息。",
+      nearby: "请告诉我周边信息。",
+      frontDesk: "请告诉我前台服务时间。",
+    };
+
+    return prompts[key];
+  }
+
+  if (language === "zh-TW") {
+    const prompts: Record<AiGuideOption["key"], string> = {
+      wifi: "請告訴我 Wi-Fi 資訊。",
+      breakfast: "請告訴我早餐資訊。",
+      bath: bathName ? `請告訴我關於${bathName}的資訊。` : "請告訴我浴場資訊。",
+      facility: "請告訴我館內設施資訊。",
+      amenity: "請告訴我備品資訊。",
+      parking: "請告訴我停車場資訊。",
+      checkout: "請告訴我退房資訊。",
+      emergency: "請告訴我緊急情況說明。",
+      roomService: "請告訴我客房服務資訊。",
+      transport: "請告訴我交通資訊。",
+      nearby: "請告訴我周邊資訊。",
+      frontDesk: "請告訴我前台服務時間。",
+    };
+
+    return prompts[key];
+  }
+
+  if (language === "ko") {
+    const prompts: Record<AiGuideOption["key"], string> = {
+      wifi: "Wi-Fi 정보를 알려 주세요.",
+      breakfast: "조식 정보를 알려 주세요.",
+      bath: bathName ? `${bathName} 정보를 알려 주세요.` : "대욕장 정보를 알려 주세요.",
+      facility: "시설 정보를 알려 주세요.",
+      amenity: "어메니티 정보를 알려 주세요.",
+      parking: "주차장 정보를 알려 주세요.",
+      checkout: "체크아웃 정보를 알려 주세요.",
+      emergency: "긴급 상황 안내를 알려 주세요.",
+      roomService: "룸서비스 정보를 알려 주세요.",
+      transport: "교통 안내를 알려 주세요.",
+      nearby: "주변 안내를 알려 주세요.",
+      frontDesk: "프런트 운영 시간을 알려 주세요.",
+    };
+
+    return prompts[key];
+  }
+
+  const prompts: Record<AiGuideOption["key"], string> = {
+    wifi: "Wi-Fiについて教えてください。",
+    breakfast: "朝食について教えてください。",
+    bath: bathName ? `${bathName}について教えてください。` : "大浴場について教えてください。",
+    facility: "館内施設について教えてください。",
+    amenity: "アメニティについて教えてください。",
+    parking: "駐車場について教えてください。",
+    checkout: "チェックアウトについて教えてください。",
+    emergency: "緊急時の案内を教えてください。",
+    roomService: "ルームサービスについて教えてください。",
+    transport: "交通案内を教えてください。",
+    nearby: "周辺案内を教えてください。",
+    frontDesk: "フロントの対応時間を教えてください。",
+  };
+
+  return prompts[key];
+}
+
 type AiGuideOption = {
   key: string;
   label: string;
@@ -557,13 +757,21 @@ function buildAiGuideOptions(
   const coveredPromptPrefixes = new Set<string>();
 
   if (knowledge?.wifi.length) {
-    options.push({ key: "wifi", label: getAiGuideLabel(language, "wifi"), prompt: "Wi-Fiについて教えてください。" });
+    options.push({
+      key: "wifi",
+      label: getAiGuideLabel(language, "wifi"),
+      prompt: getLocalizedGuidePrompt(language, "wifi"),
+    });
     coveredPromptPrefixes.add("wi-fi");
     coveredPromptPrefixes.add("wifi");
   }
 
   if (knowledge?.breakfast.length) {
-    options.push({ key: "breakfast", label: getAiGuideLabel(language, "breakfast"), prompt: "朝食について教えてください。" });
+    options.push({
+      key: "breakfast",
+      label: getAiGuideLabel(language, "breakfast"),
+      prompt: getLocalizedGuidePrompt(language, "breakfast"),
+    });
     coveredPromptPrefixes.add("朝食");
   }
 
@@ -572,54 +780,90 @@ function buildAiGuideOptions(
     options.push({
       key: "bath",
       label: getAiGuideLabel(language, "bath"),
-      prompt: `${bathName}について教えてください。`,
+      prompt: getLocalizedGuidePrompt(language, "bath", language === "ja" ? bathName : undefined),
     });
     coveredPromptPrefixes.add("大浴場");
     coveredPromptPrefixes.add(normalizeGuideText(bathName));
   }
 
   if ((knowledge?.facilities.length ?? 0) > 0 || (knowledge?.facilityLocations.length ?? 0) > 0) {
-    options.push({ key: "facility", label: getAiGuideLabel(language, "facility"), prompt: "館内施設について教えてください。" });
+    options.push({
+      key: "facility",
+      label: getAiGuideLabel(language, "facility"),
+      prompt: getLocalizedGuidePrompt(language, "facility"),
+    });
     coveredPromptPrefixes.add("館内施設");
   }
 
   if (knowledge?.amenities.length) {
-    options.push({ key: "amenity", label: getAiGuideLabel(language, "amenity"), prompt: "アメニティについて教えてください。" });
+    options.push({
+      key: "amenity",
+      label: getAiGuideLabel(language, "amenity"),
+      prompt: getLocalizedGuidePrompt(language, "amenity"),
+    });
     coveredPromptPrefixes.add("アメニティ");
   }
 
   if (knowledge?.parking.length) {
-    options.push({ key: "parking", label: getAiGuideLabel(language, "parking"), prompt: "駐車場について教えてください。" });
+    options.push({
+      key: "parking",
+      label: getAiGuideLabel(language, "parking"),
+      prompt: getLocalizedGuidePrompt(language, "parking"),
+    });
     coveredPromptPrefixes.add("駐車場");
   }
 
   if (knowledge?.checkout.length) {
-    options.push({ key: "checkout", label: getAiGuideLabel(language, "checkout"), prompt: "チェックアウトについて教えてください。" });
+    options.push({
+      key: "checkout",
+      label: getAiGuideLabel(language, "checkout"),
+      prompt: getLocalizedGuidePrompt(language, "checkout"),
+    });
     coveredPromptPrefixes.add("チェックアウト");
   }
 
   if (knowledge?.emergency.length) {
-    options.push({ key: "emergency", label: getAiGuideLabel(language, "emergency"), prompt: "緊急時の案内を教えてください。" });
+    options.push({
+      key: "emergency",
+      label: getAiGuideLabel(language, "emergency"),
+      prompt: getLocalizedGuidePrompt(language, "emergency"),
+    });
   }
 
   if (knowledge?.roomService.length) {
-    options.push({ key: "roomService", label: getAiGuideLabel(language, "roomService"), prompt: "ルームサービスについて教えてください。" });
+    options.push({
+      key: "roomService",
+      label: getAiGuideLabel(language, "roomService"),
+      prompt: getLocalizedGuidePrompt(language, "roomService"),
+    });
   }
 
   if (knowledge?.transport.length) {
-    options.push({ key: "transport", label: getAiGuideLabel(language, "transport"), prompt: "交通案内を教えてください。" });
+    options.push({
+      key: "transport",
+      label: getAiGuideLabel(language, "transport"),
+      prompt: getLocalizedGuidePrompt(language, "transport"),
+    });
     coveredPromptPrefixes.add("交通");
     coveredPromptPrefixes.add("交通案内");
   }
 
   if (knowledge?.nearbySpots.length) {
-    options.push({ key: "nearby", label: getAiGuideLabel(language, "nearby"), prompt: "周辺案内を教えてください。" });
+    options.push({
+      key: "nearby",
+      label: getAiGuideLabel(language, "nearby"),
+      prompt: getLocalizedGuidePrompt(language, "nearby"),
+    });
     coveredPromptPrefixes.add("周辺");
     coveredPromptPrefixes.add("周辺案内");
   }
 
   if (knowledge?.frontDeskHours.length) {
-    options.push({ key: "frontDesk", label: getAiGuideLabel(language, "frontDesk"), prompt: "フロントの対応時間を教えてください。" });
+    options.push({
+      key: "frontDesk",
+      label: getAiGuideLabel(language, "frontDesk"),
+      prompt: getLocalizedGuidePrompt(language, "frontDesk"),
+    });
     coveredPromptPrefixes.add("フロント");
     coveredPromptPrefixes.add("フロント対応");
   }
@@ -644,7 +888,7 @@ function buildAiGuideOptions(
       .map((prompt) => ({
         key: `prompt:${prompt}`,
         label: localizeSupplementalPrompt(language, prompt),
-        prompt,
+        prompt: localizeSupplementalPrompt(language, prompt),
       })),
   ];
 }
@@ -665,7 +909,10 @@ function GuestChatInput({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isRichMenuOpen, setIsRichMenuOpen] = useState(false);
+  const submitLockRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const isBusy = isPending || isSubmitting;
 
   async function postGuestMessage(body: string, nextMode: "ai" | "human") {
     const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
@@ -724,6 +971,8 @@ function GuestChatInput({
     imageUrl?: string,
     imageAlt?: string,
     category?: string,
+    protectedTerms?: string[],
+    translations?: GuestRichMenuItem["translations"],
   ) {
     const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
       method: "POST",
@@ -737,6 +986,8 @@ function GuestChatInput({
         category,
         mode: "ai",
         kind: "ai_message",
+        protectedTerms,
+        translations,
       }),
     });
 
@@ -787,177 +1038,246 @@ function GuestChatInput({
   async function submitMessage(body: string) {
     const trimmed = body.trim();
 
-    if (!trimmed) {
+    if (!trimmed || submitLockRef.current) {
       return;
     }
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
 
     const optimisticMessage = createOptimisticMessage("optimistic", "guest", trimmed);
     onOptimisticSend(optimisticMessage);
     setError(null);
     setMessage("");
 
-    const response = await postGuestMessage(trimmed, mode);
+    try {
+      const response = await postGuestMessage(trimmed, mode);
 
-    if (!response.ok) {
-      onOptimisticRemove(optimisticMessage.id);
-      setError(ui.messageSendError);
-      return;
+      if (!response.ok) {
+        onOptimisticRemove(optimisticMessage.id);
+        setError(ui.messageSendError);
+        return;
+      }
+
+      onModeChange(response.mode);
+      onMessagesReplace(
+        optimisticMessage.id,
+        response.messages.map((message) => ({ ...message, optimistic: false })),
+      );
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
-
-    onModeChange(response.mode);
-    onMessagesReplace(
-      optimisticMessage.id,
-      response.messages.map((message) => ({ ...message, optimistic: false })),
-    );
   }
 
   async function submitRichMenuAction(action: GuestRichMenuItem) {
+    if (submitLockRef.current) {
+      return;
+    }
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
     setError(null);
 
-    if (!isGuestRichMenuActionType(action.actionType)) {
-      console.warn("[guest/rich-menu] unsupported action", {
-        roomId,
-        actionId: action.id,
-        actionType: action.actionType,
-      });
-      setError(ui.menuUnavailableError);
-      return;
-    }
+    try {
+      const mergedProtectedTerms = [
+        ...(richMenu?.translationProtectedTerms ?? []),
+        ...(action.protectedTerms ?? []),
+      ];
 
-    const actionSpec = GUEST_RICH_MENU_ACTION_SPECS[action.actionType];
-
-    const requiredField = GUEST_RICH_MENU_ACTION_REQUIREMENTS[action.actionType];
-
-    if (requiredField && !hasRequiredRichMenuField(action)) {
-      console.warn("[guest/rich-menu] missing action config", {
-        roomId,
-        actionId: action.id,
-        actionType: action.actionType,
-        requiredField,
-      });
-      setError(ui.menuUnavailableError);
-      return;
-    }
-
-    if (actionSpec.opensExternalUrl && action.actionType === "external_link" && action.url) {
-      window.open(action.url, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    if (action.actionType === "ai_prompt" && action.prompt) {
-      const optimisticMessage = createOptimisticMessage("rich-prompt", "ai", action.prompt);
-      onOptimisticSend(optimisticMessage);
-
-      const response = await postAiStarterMessage(action.prompt);
-
-      if (!response.ok) {
-        onOptimisticRemove(optimisticMessage.id);
+      if (!isGuestRichMenuActionType(action.actionType)) {
+        console.warn("[guest/rich-menu] unsupported action", {
+          roomId,
+          actionId: action.id,
+          actionType: action.actionType,
+        });
         setError(ui.messageSendError);
         return;
       }
 
-      onModeChange("ai");
-      onMessagesReplace(
-        optimisticMessage.id,
-        response.messages.map((message) => ({ ...message, optimistic: false })),
-      );
-      return;
-    }
+      const actionSpec = GUEST_RICH_MENU_ACTION_SPECS[action.actionType];
 
-    if (action.actionType === "ai_message" && (action.messageText || action.messageImageUrl)) {
-      const optimisticMessage = createOptimisticRichMessage(
-        "rich-ai-message",
-        "ai",
-        action.messageText ?? "",
-        action.messageImageUrl,
-        action.messageImageAlt,
-      );
-      onOptimisticSend(optimisticMessage);
+      const requiredField = GUEST_RICH_MENU_ACTION_REQUIREMENTS[action.actionType];
 
-      const response = await postAiDisplayMessage(
-        action.messageText,
-        action.messageImageUrl,
-        action.messageImageAlt,
-        action.label,
-      );
-
-      if (!response.ok) {
-        onOptimisticRemove(optimisticMessage.id);
-        setError(ui.messageSendError);
+      if (requiredField && !hasRequiredRichMenuField(action)) {
+        console.warn("[guest/rich-menu] missing action config", {
+          roomId,
+          actionId: action.id,
+          actionType: action.actionType,
+          requiredField,
+        });
+        setError(ui.menuUnavailableError);
         return;
       }
 
-      onModeChange("ai");
-      onMessagesReplace(
-        optimisticMessage.id,
-        response.messages.map((message) => ({ ...message, optimistic: false })),
-      );
-      return;
-    }
-
-    if (
-      action.actionType === "handoff_category" &&
-      action.handoffCategory
-    ) {
-      const optimisticMessage = createOptimisticMessage(
-        "handoff-category",
-        "guest",
-        action.handoffCategory,
-      );
-      onOptimisticSend(optimisticMessage);
-
-      const response = await postHumanHandoff(action.handoffCategory);
-
-      if (!response.ok) {
-        onOptimisticRemove(optimisticMessage.id);
-        setError(ui.handoffError);
+      if (actionSpec.opensExternalUrl && action.actionType === "external_link" && action.url) {
+        window.open(action.url, "_blank", "noopener,noreferrer");
         return;
       }
 
-      onModeChange(response.mode);
-      onMessagesReplace(
-        optimisticMessage.id,
-        response.messages.map((message) => ({ ...message, optimistic: false })),
-      );
-      return;
-    }
+      if (action.actionType === "ai_prompt" && action.prompt) {
+        const optimisticMessage =
+          language === "ja"
+            ? createOptimisticMessage("rich-prompt", "ai", action.prompt)
+            : null;
 
-    if (action.actionType === "human_handoff") {
-      const response = await postHumanHandoff();
+        if (optimisticMessage) {
+          onOptimisticSend(optimisticMessage);
+        }
 
-      if (!response.ok) {
-        setError(ui.handoffError);
-        return;
-      }
+        const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            body: action.prompt,
+            mode: "ai",
+            kind: "ai_starter",
+            protectedTerms: mergedProtectedTerms,
+            translations: action.translations,
+          }),
+        }).then(async (response) => {
+          const payload = response.ok
+            ? await response.json() as { threadId?: string; messages?: GuestMessage[] }
+            : null;
 
-      onModeChange(response.mode);
-      onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
-      return;
-    }
-
-    if (action.actionType === "language") {
-      if (action.languageCode) {
-        const languageCode = action.languageCode;
-        const response = await switchLanguage(languageCode);
+          return {
+            ok: response.ok,
+            threadId: payload?.threadId ?? null,
+            messages: (payload?.messages ?? []) as GuestMessage[],
+          };
+        });
 
         if (!response.ok) {
-          setError(ui.menuUnavailableError);
+          if (optimisticMessage) {
+            onOptimisticRemove(optimisticMessage.id);
+          }
+          setError(ui.messageSendError);
+          return;
+        }
+
+        onModeChange("ai");
+        if (optimisticMessage) {
+          onMessagesReplace(
+            optimisticMessage.id,
+            response.messages.map((message) => ({ ...message, optimistic: false })),
+          );
+        } else {
+          onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
+        }
+        return;
+      }
+
+      if (action.actionType === "ai_message" && (action.messageText || action.messageImageUrl)) {
+        const optimisticMessage =
+          language === "ja"
+            ? createOptimisticRichMessage(
+                "rich-ai-message",
+                "ai",
+                action.messageText ?? "",
+                action.messageImageUrl,
+                action.messageImageAlt,
+              )
+            : null;
+
+        if (optimisticMessage) {
+          onOptimisticSend(optimisticMessage);
+        }
+
+        const response = await postAiDisplayMessage(
+          action.messageText,
+          action.messageImageUrl,
+          action.messageImageAlt,
+          action.label,
+          mergedProtectedTerms,
+          action.translations,
+        );
+
+        if (!response.ok) {
+          if (optimisticMessage) {
+            onOptimisticRemove(optimisticMessage.id);
+          }
+          setError(ui.messageSendError);
+          return;
+        }
+
+        onModeChange("ai");
+        if (optimisticMessage) {
+          onMessagesReplace(
+            optimisticMessage.id,
+            response.messages.map((message) => ({ ...message, optimistic: false })),
+          );
+        } else {
+          onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
+        }
+        return;
+      }
+
+      if (
+        action.actionType === "handoff_category" &&
+        action.handoffCategory
+      ) {
+        const optimisticMessage = createOptimisticMessage(
+          "handoff-category",
+          "guest",
+          action.handoffCategory,
+        );
+        onOptimisticSend(optimisticMessage);
+
+        const response = await postHumanHandoff(action.handoffCategory);
+
+        if (!response.ok) {
+          onOptimisticRemove(optimisticMessage.id);
+          setError(ui.handoffError);
+          return;
+        }
+
+        onModeChange(response.mode);
+        onMessagesReplace(
+          optimisticMessage.id,
+          response.messages.map((message) => ({ ...message, optimistic: false })),
+        );
+        return;
+      }
+
+      if (action.actionType === "human_handoff") {
+        const response = await postHumanHandoff();
+
+        if (!response.ok) {
+          setError(ui.handoffError);
+          return;
+        }
+
+        onModeChange(response.mode);
+        onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
+        return;
+      }
+
+      if (action.actionType === "language") {
+        if (action.languageCode) {
+          const languageCode = action.languageCode;
+          const response = await switchLanguage(languageCode);
+
+          if (!response.ok) {
+            setError(ui.menuUnavailableError);
+            return;
+          }
+
+          startTransition(() => {
+            router.push(`/guest/${roomId}/chat?lang=${encodeURIComponent(languageCode)}`);
+          });
           return;
         }
 
         startTransition(() => {
-          router.push(`/guest/${roomId}/chat?lang=${encodeURIComponent(languageCode)}`);
+          router.push(`/guest/${roomId}/language`);
         });
-        return;
       }
-
-      startTransition(() => {
-        router.push(`/guest/${roomId}/language`);
-      });
-      return;
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
-
-    return;
   }
 
   return (
@@ -987,7 +1307,7 @@ function GuestChatInput({
                   <button
                     key={item.id}
                     type="button"
-                    disabled={isPending}
+                    disabled={isBusy}
                     aria-label={item.label}
                     title={item.label}
                     onClick={() => {
@@ -1047,16 +1367,17 @@ function GuestChatInput({
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder={ui.messagePlaceholder}
+                disabled={isBusy}
                 className="h-10 flex-1 resize-none bg-white px-3 py-2 text-sm leading-5 text-[#5f463d] outline-none"
               />
             </div>
             <button
               type="button"
-              disabled={!message.trim() || isPending}
+              disabled={!message.trim() || isBusy}
               onClick={() => submitMessage(message)}
               className="flex h-10 min-w-[56px] items-center justify-center border border-[#981d15] bg-[#ad2218] px-4 text-sm font-light text-white disabled:opacity-60 lg:h-10 lg:min-w-[56px] lg:px-4 lg:text-[12px]"
             >
-              {isPending ? "..." : ui.sendLabel}
+              {isBusy ? "..." : ui.sendLabel}
             </button>
           </div>
           {error ? (
@@ -1080,7 +1401,7 @@ function GuestActionPanel({
   prompts,
   showIntro = false,
   onModeChange,
-  onMessagesAppend,
+  onMessagesReplace,
   onOptimisticRemove,
   onOptimisticSend,
 }: GuestActionPanelProps) {
@@ -1091,60 +1412,95 @@ function GuestActionPanel({
   const [isRequestOptionsOpen, setIsRequestOptionsOpen] = useState(false);
   const [isAiOptionsOpen, setIsAiOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPending] = useTransition();
+  const submitLockRef = useRef(false);
+  const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isBusy = isPending || isSubmitting;
 
   async function submitAiPrompt(body: string) {
+    if (submitLockRef.current) {
+      return;
+    }
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
     setError(null);
 
     const optimisticMessage = createOptimisticMessage("starter", "guest", body);
     onOptimisticSend(optimisticMessage);
 
-    const rawResponse = await fetch(`/api/guest/rooms/${roomId}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        body,
-        mode: "ai",
-      }),
-    });
+    try {
+      const rawResponse = await fetch(`/api/guest/rooms/${roomId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body,
+          mode: "ai",
+        }),
+      });
 
-    if (!rawResponse.ok) {
-      onOptimisticRemove(optimisticMessage.id);
-      setError(ui.aiStarterError);
-      return;
+      if (!rawResponse.ok) {
+        onOptimisticRemove(optimisticMessage.id);
+        setError(ui.aiStarterError);
+        return;
+      }
+
+      const response = await rawResponse.json() as { messages?: GuestMessage[] };
+      startTransition(() => {
+        onModeChange("ai");
+      });
+      onMessagesReplace(
+        optimisticMessage.id,
+        (response.messages ?? []).map((message) => ({ ...message, optimistic: false })),
+      );
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
-
-    const response = await rawResponse.json() as { messages?: GuestMessage[] };
-    onModeChange("ai");
-    onMessagesAppend((response.messages ?? []).map((message) => ({ ...message, optimistic: false })));
   }
 
   async function startHumanRequest(category: string) {
+    if (submitLockRef.current) {
+      return;
+    }
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
     setError(null);
     setIsRequestOptionsOpen(false);
 
     const optimisticMessage = createOptimisticMessage("handoff-category", "guest", category);
     onOptimisticSend(optimisticMessage);
 
-    const rawResponse = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ category }),
-    });
+    try {
+      const rawResponse = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ category }),
+      });
 
-    if (!rawResponse.ok) {
-      onOptimisticRemove(optimisticMessage.id);
-      setError(ui.handoffError);
-      return;
+      if (!rawResponse.ok) {
+        onOptimisticRemove(optimisticMessage.id);
+        setError(ui.handoffError);
+        return;
+      }
+
+      const response = await rawResponse.json() as { messages?: GuestMessage[] };
+      startTransition(() => {
+        onModeChange("human");
+      });
+      onMessagesReplace(
+        optimisticMessage.id,
+        (response.messages ?? []).map((message) => ({ ...message, optimistic: false })),
+      );
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
-
-    const response = await rawResponse.json() as { messages?: GuestMessage[] };
-    onModeChange("human");
-    onMessagesAppend((response.messages ?? []).map((message) => ({ ...message, optimistic: false })));
   }
 
   return (
@@ -1172,7 +1528,7 @@ function GuestActionPanel({
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              disabled={isPending}
+              disabled={isBusy}
               onClick={() => {
                 setIsRequestOptionsOpen((current) => !current);
                 setIsAiOptionsOpen(false);
@@ -1188,7 +1544,7 @@ function GuestActionPanel({
             </button>
             <button
               type="button"
-              disabled={isPending}
+              disabled={isBusy}
               onClick={() => {
                 setIsAiOptionsOpen((current) => !current);
                 setIsRequestOptionsOpen(false);
@@ -1214,7 +1570,7 @@ function GuestActionPanel({
                     <button
                       key={option.key}
                       type="button"
-                      disabled={isPending}
+                      disabled={isBusy}
                       onClick={() => {
                         void submitAiPrompt(option.prompt);
                         setIsAiOptionsOpen(false);
@@ -1238,7 +1594,7 @@ function GuestActionPanel({
                   <button
                     key={category}
                     type="button"
-                    disabled={isPending}
+                    disabled={isBusy}
                     onClick={() => {
                       void startHumanRequest(category);
                     }}
@@ -1315,6 +1671,9 @@ export function GuestChatExperience({
 
     return messages;
   }, [activeMode, hasGuestMessage, messages]);
+  const hasPendingGuestReadReceipt = messages.some(
+    (message) => message.sender === "guest" && !message.optimistic && !message.isRead && !message.readAt,
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -1332,6 +1691,46 @@ export function GuestChatExperience({
 
     router.replace(`/guest/${roomId}/chat?mode=${activeMode}`, { scroll: false });
   }, [activeMode, clearThreadQueryOnMount, roomId, router]);
+
+  useEffect(() => {
+    if (!hasPendingGuestReadReceipt) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncMessages = async () => {
+      const response = await fetch(
+        `/api/guest/rooms/${roomId}/messages?mode=${encodeURIComponent(activeMode)}`,
+        { method: "GET", cache: "no-store" },
+      );
+
+      if (!response.ok || cancelled) {
+        return;
+      }
+
+      const payload = await response.json() as { messages?: GuestMessage[] };
+      const serverMessages = (payload.messages ?? []).map((message) => ({
+        ...message,
+        optimistic: false,
+      }));
+
+      setChatMessages((current) => {
+        const optimisticMessages = current.filter((message) => message.optimistic);
+        return [...serverMessages, ...optimisticMessages];
+      });
+    };
+
+    void syncMessages();
+    const intervalId = window.setInterval(() => {
+      void syncMessages();
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeMode, hasPendingGuestReadReceipt, roomId]);
 
   const appendMessages = (newMessages: DisplayMessage[]) => {
     if (newMessages.length === 0) {
@@ -1377,7 +1776,7 @@ export function GuestChatExperience({
             prompts={prompts}
             showIntro
             onModeChange={setActiveMode}
-            onMessagesAppend={appendMessages}
+            onMessagesReplace={replaceOptimisticMessage}
             onOptimisticRemove={removeOptimisticMessage}
             onOptimisticSend={(message) => {
               setChatMessages((current) => [...current, message]);
@@ -1410,9 +1809,11 @@ export function GuestChatExperience({
                       </div>
                       <div className="mt-1 flex justify-end text-[11px] text-[#8b776e] lg:text-[10px]">
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
-                        <span className="ml-2 font-light">
-                          {message.optimistic ? ui.sendingLabel : ui.readLabel}
-                        </span>
+                        {message.optimistic ? (
+                          <span className="ml-2 font-light">{ui.sendingLabel}</span>
+                        ) : shouldShowReadLabel(message) ? (
+                          <span className="ml-2 font-light">{ui.readLabel}</span>
+                        ) : null}
                       </div>
                     </div>
                   ) : isSystem ? (
@@ -1466,7 +1867,7 @@ export function GuestChatExperience({
               richMenu={richMenu}
               prompts={prompts}
               onModeChange={setActiveMode}
-              onMessagesAppend={appendMessages}
+              onMessagesReplace={replaceOptimisticMessage}
               onOptimisticRemove={removeOptimisticMessage}
               onOptimisticSend={(message) => {
                 setChatMessages((current) => [...current, message]);

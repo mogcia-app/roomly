@@ -9,6 +9,8 @@ export type GuestMessage = {
   imageUrl?: string | null;
   imageAlt?: string | null;
   timestamp: string | null;
+  readAt?: string | null;
+  isRead?: boolean;
   originalBody?: string | null;
   originalLanguage?: string | null;
   translatedBodyFront?: string | null;

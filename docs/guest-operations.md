@@ -98,6 +98,29 @@ Supported hearing sheet categories:
   - `fallback`
   - `ready`
 
+## Guest Read Receipt
+
+- Guest-side `既読` is shown only when the hotel side writes a read timestamp to the guest message document
+- Supported fields for guest read receipt:
+  - `read_at_guest`
+  - `readAtGuest`
+  - `read_at`
+  - `readAt`
+  - `seen_at_guest`
+  - `seenAtGuest`
+- Hotel-side systems can mark a thread as read with:
+  - `POST /api/admin/guest-threads/[threadId]/read`
+- Request body:
+
+```json
+{
+  "messageIds": ["messageDocId1", "messageDocId2"]
+}
+```
+
+- If `messageIds` is omitted, all unread guest messages in that thread are marked as read
+- Guest chat polls `/api/guest/rooms/[roomId]/messages?mode=ai|human` and updates the read receipt automatically
+
 ## Fallback Rules
 
 - If `OPENAI_API_KEY` is missing, translation falls back without failing the chat

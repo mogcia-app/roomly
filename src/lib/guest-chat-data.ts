@@ -41,6 +41,9 @@ type FirestoreChatThread = {
   rich_menu_action_type?: "ai_message" | null;
   rich_menu_label?: string | null;
   guest_language?: string | null;
+  pending_handoff_confirmation?: boolean;
+  pending_handoff_body?: string | null;
+  pending_handoff_category?: string | null;
   last_message_body?: string;
   last_message_at?: unknown;
   last_message_sender?: "guest" | "ai" | "front" | "system";
@@ -72,6 +75,7 @@ type FirestoreMessage = {
   translated_body_guest?: string | null;
   translated_language_guest?: string | null;
   translation_state?: GuestTranslationState;
+  handoff_confirmation?: boolean;
   read_at_guest?: { toDate?: () => Date } | string | null;
   readAtGuest?: { toDate?: () => Date } | string | null;
   read_at?: { toDate?: () => Date } | string | null;
@@ -423,12 +427,16 @@ function normalizeMessage(
     translatedBodyGuest: message.translated_body_guest ?? null,
     translatedLanguageGuest: message.translated_language_guest ?? null,
     translationState: message.translation_state ?? "not_required",
+    handoffConfirmation: message.handoff_confirmation === true,
   };
 }
 
 function buildRuntimeMessage(
   sender: NonNullable<FirestoreMessage["sender"]>,
   payload: TranslationPayload,
+  options?: {
+    handoffConfirmation?: boolean;
+  },
 ): GuestMessage {
   return {
     id: `runtime-${sender}-${Math.random().toString(36).slice(2, 10)}`,
@@ -446,6 +454,7 @@ function buildRuntimeMessage(
     translatedBodyGuest: payload.translatedBodyGuest,
     translatedLanguageGuest: payload.translatedLanguageGuest,
     translationState: payload.translationState,
+    handoffConfirmation: options?.handoffConfirmation === true,
   };
 }
 
@@ -454,6 +463,9 @@ async function addMessage(
   threadId: string,
   sender: FirestoreMessage["sender"],
   payload: TranslationPayload,
+  options?: {
+    handoffConfirmation?: boolean;
+  },
 ) {
   await getAdminDb().collection("messages").add({
     thread_id: threadId,
@@ -470,6 +482,7 @@ async function addMessage(
     translated_body_guest: payload.translatedBodyGuest,
     translated_language_guest: payload.translatedLanguageGuest,
     translation_state: payload.translationState,
+    handoff_confirmation: options?.handoffConfirmation === true,
     timestamp: FieldValue.serverTimestamp(),
   } satisfies FirestoreMessage & { timestamp: unknown });
 }
@@ -651,6 +664,9 @@ async function updateAiThreadMetadata(
     category?: string | null;
     richMenuActionType?: "ai_message" | null;
     richMenuLabel?: string | null;
+    pendingHandoffConfirmation?: boolean;
+    pendingHandoffBody?: string | null;
+    pendingHandoffCategory?: string | null;
   },
 ) {
   const roomDisplayName = resolveRoomDisplayName({
@@ -676,6 +692,9 @@ async function updateAiThreadMetadata(
       rich_menu_action_type: options?.richMenuActionType ?? null,
       rich_menu_label: options?.richMenuLabel ?? null,
       guest_language: stayStatus.selectedLanguage,
+      pending_handoff_confirmation: options?.pendingHandoffConfirmation ?? false,
+      pending_handoff_body: options?.pendingHandoffBody ?? null,
+      pending_handoff_category: options?.pendingHandoffCategory ?? null,
       last_message_body: lastMessageBody,
       last_message_at: FieldValue.serverTimestamp(),
       last_message_sender: lastMessageSender,
@@ -822,6 +841,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "Please connect me to the front desk.",
       handoffWaiting: "The front desk has been notified. Please wait for a reply.",
+      handoffConfirmationPrompt: "I can't confirm this with AI alone. Would you like me to forward this message to the front desk?",
+      handoffConfirmationDeclined: "Understood. If you need anything else, please send another message.",
       taxiHandoffPrompt: "Taxi request received. Please send the date and time, destination, and any notes for the front desk.",
       frontDeskFallback: "The AI cannot confirm this. Please use \"Delivery / Request\" below to send it to the front desk or switch to staff support.",
       handoffGuidance: "If you want the front desk to check this, use \"Delivery / Request\" below to send your request. Staff support can take over from there.",
@@ -833,6 +854,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "请帮我联系前台。",
       handoffWaiting: "已通知前台，请等待回复。",
+      handoffConfirmationPrompt: "这项内容仅靠 AI 无法确认。要我将这条消息转给前台吗？",
+      handoffConfirmationDeclined: "好的。如还有其他问题，请继续发送消息。",
       taxiHandoffPrompt: "已收到叫车需求。请发送乘车日期时间、目的地，以及需要注意的事项，前台会跟进。",
       frontDeskFallback: "此内容 AI 无法确认。请使用下方的“送达 / 请求”发送给前台，或切换为人工处理。",
       handoffGuidance: "如果您想让前台帮您确认，请使用下方的“送达 / 请求”发送需求，之后可切换为人工处理。",
@@ -844,6 +867,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "請幫我聯繫前台。",
       handoffWaiting: "已通知前台，請等待回覆。",
+      handoffConfirmationPrompt: "這項內容僅靠 AI 無法確認。要我將這則訊息轉給前台嗎？",
+      handoffConfirmationDeclined: "好的。如果還有其他問題，請再傳送訊息。",
       taxiHandoffPrompt: "已收到叫車需求。請傳送搭乘日期時間、目的地，以及需要注意的事項，前台會協助處理。",
       frontDeskFallback: "此內容 AI 無法確認。請使用下方的「送達 / 請求」發送給前台，或切換為人工處理。",
       handoffGuidance: "如果您想請前台幫您確認，請使用下方的「送達 / 請求」送出需求，之後可切換為人工處理。",
@@ -855,6 +880,8 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "프런트로 연결해 주세요.",
       handoffWaiting: "프런트에 알렸습니다. 답변을 기다려 주세요.",
+      handoffConfirmationPrompt: "이 내용은 AI만으로 확인할 수 없습니다. 이 메시지를 프런트로 전달할까요?",
+      handoffConfirmationDeclined: "알겠습니다. 다른 문의가 있으면 다시 메시지를 보내 주세요.",
       taxiHandoffPrompt: "택시 요청을 접수했습니다. 이용 일시, 목적지, 전달 사항을 보내 주시면 프런트가 확인합니다.",
       frontDeskFallback: "이 내용은 AI가 확인할 수 없습니다. 아래의 \"배달 / 요청\"으로 프런트에 보내거나 직원 대응으로 전환해 주세요.",
       handoffGuidance: "프런트에 확인을 맡기려면 아래의 \"배달 / 요청\"으로 내용을 보내 주세요. 이후 직원 대응으로 이어갈 수 있습니다.",
@@ -865,12 +892,43 @@ function getLocalizedServerCopy(language: GuestLanguage) {
   return {
     handoffRequest: "フロント対応をお願いします。",
     handoffWaiting: "フロントへ通知しました。返信をお待ちください。",
+    handoffConfirmationPrompt: "この内容をフロントへおつなぎしてもいいですか？",
+    handoffConfirmationDeclined: "承知しました。ほかにご質問があればそのままお送りください。",
     taxiHandoffPrompt: "タクシー手配を承りました。フロントへ送るため、以下をご記入ください。\n・ご利用日時\n・行き先\n・注意事項",
     frontDeskFallback: "この内容はAIでは確認できません。下の「お届け・ご依頼」からフロントへ送るか、有人対応へ切り替えてください。",
     handoffGuidance: "フロントに確認したい場合は、下の「お届け・ご依頼」から内容を送ってください。必要ならそのままスタッフ対応へつなげられます。",
     emergencyFallback:
       "登録済みの緊急連絡先が見つかりません。すぐにフロントへご確認ください。",
   };
+}
+
+function isGuestAffirmative(body: string) {
+  const normalized = normalizeText(body);
+  return [
+    "はい",
+    "お願いします",
+    "おねがいします",
+    "ok",
+    "okay",
+    "yes",
+    "y",
+    "sure",
+    "お願いします。",
+    "はい。",
+  ].some((entry) => normalized === normalizeText(entry));
+}
+
+function isGuestNegative(body: string) {
+  const normalized = normalizeText(body);
+  return [
+    "いいえ",
+    "不要です",
+    "大丈夫です",
+    "結構です",
+    "no",
+    "n",
+    "cancel",
+  ].some((entry) => normalized === normalizeText(entry));
 }
 
 function isTaxiHandoffCategory(category: string) {
@@ -1476,6 +1534,11 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
   const copy = getLocalizedServerCopy(language);
   const normalizedBody = normalizeText(body);
   const frontDeskFallback = copy.frontDeskFallback;
+  const toReply = (reply: string) => ({
+    body: reply,
+    needsHandoffConfirmation: false,
+    pendingHandoffBody: null,
+  });
 
   const isEmergency =
     includesAny(normalized, ["fire", "ambulance", "accident", "emergency"]) ||
@@ -1496,16 +1559,16 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const emergencyReply = takeFormatted(
       (knowledge?.emergency ?? []).map((entry) => formatEmergencyEntry(entry)),
     );
-    return emergencyReply || copy.emergencyFallback;
+    return toReply(emergencyReply || copy.emergencyFallback);
   }
 
   const faq = findBestFaq(stayStatus, body);
   if (faq?.answer) {
-    return faq.answer;
+    return toReply(faq.answer);
   }
 
   if (isFrontDeskHandoffIntent(body, normalizedBody)) {
-    return copy.handoffGuidance;
+    return toReply(copy.handoffGuidance);
   }
 
   if (
@@ -1523,7 +1586,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const wifiReply = takeFormatted((floorMatched.length > 0 ? floorMatched : wifiEntries).map(
       (entry) => formatWifiEntry(entry),
     ));
-    return wifiReply || frontDeskFallback;
+    return toReply(wifiReply || frontDeskFallback);
   }
 
   if (
@@ -1535,7 +1598,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const breakfastReply = takeFormatted(
       (knowledge?.breakfast ?? []).map((entry) => formatBreakfastEntry(entry)),
     );
-    return breakfastReply || frontDeskFallback;
+    return toReply(breakfastReply || frontDeskFallback);
   }
 
   if (
@@ -1550,7 +1613,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
   ) {
     const amenities = matchByName(knowledge?.amenities ?? [], body);
     const amenityReply = takeFormatted(amenities.map((entry) => formatAmenityEntry(entry)));
-    return amenityReply || frontDeskFallback;
+    return toReply(amenityReply || frontDeskFallback);
   }
 
   if (
@@ -1562,7 +1625,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const checkoutReply = takeFormatted(
       (knowledge?.checkout ?? []).map((entry) => formatCheckoutEntry(entry)),
     );
-    return checkoutReply || frontDeskFallback;
+    return toReply(checkoutReply || frontDeskFallback);
   }
 
   if (
@@ -1574,7 +1637,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const transportReply = takeFormatted(
       (knowledge?.transport ?? []).map((entry) => formatTransportEntry(entry)),
     );
-    return transportReply || frontDeskFallback;
+    return toReply(transportReply || frontDeskFallback);
   }
 
   if (
@@ -1588,7 +1651,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
         formatNearbySpotEntry(entry),
       ),
     );
-    return nearbyReply || frontDeskFallback;
+    return toReply(nearbyReply || frontDeskFallback);
   }
 
   if (
@@ -1598,7 +1661,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const parkingReply = takeFormatted(
       (knowledge?.parking ?? []).map((entry) => formatParkingEntry(entry)),
     );
-    return parkingReply || frontDeskFallback;
+    return toReply(parkingReply || frontDeskFallback);
   }
 
   if (
@@ -1609,7 +1672,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const roomServiceReply = takeFormatted(
       (knowledge?.roomService ?? []).map((entry) => formatRoomServiceEntry(entry)),
     );
-    return roomServiceReply || frontDeskFallback;
+    return toReply(roomServiceReply || frontDeskFallback);
   }
 
   if (
@@ -1621,7 +1684,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     const bathReply = takeFormatted(
       (knowledge?.baths ?? []).map((entry) => formatBathEntry(entry)),
     );
-    return bathReply || frontDeskFallback;
+    return toReply(bathReply || frontDeskFallback);
   }
 
   if (
@@ -1647,11 +1710,11 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
         formatFacilityEntry(entry),
       ),
     ]);
-    return facilityReply || frontDeskFallback;
+    return toReply(facilityReply || frontDeskFallback);
   }
 
   if (normalizedBody.includes("フロント") && (knowledge?.frontDeskHours?.length ?? 0) > 0) {
-    return takeFormatted(knowledge?.frontDeskHours ?? []) || frontDeskFallback;
+    return toReply(takeFormatted(knowledge?.frontDeskHours ?? []) || frontDeskFallback);
   }
 
   const bestKnowledgeReply = findBestKnowledgeReply(stayStatus, body);
@@ -1663,7 +1726,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
       knowledgeCounts: summarizeKnowledgeAvailability(knowledge),
       replyPreview: bestKnowledgeReply.slice(0, 120),
     });
-    return bestKnowledgeReply;
+    return toReply(bestKnowledgeReply);
   }
 
   console.warn("[guest/ai] falling back to front desk", {
@@ -1673,7 +1736,26 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     knowledgeCounts: summarizeKnowledgeAvailability(knowledge),
   });
 
-  return frontDeskFallback;
+  return {
+    body: copy.handoffConfirmationPrompt,
+    needsHandoffConfirmation: true,
+    pendingHandoffBody: body,
+  };
+}
+
+async function clearAiPendingHandoff(threadId: string) {
+  await getAdminDb().collection("chat_threads").doc(threadId).set(
+    {
+      pending_handoff_confirmation: false,
+      pending_handoff_body: null,
+      pending_handoff_category: null,
+      updated_at: FieldValue.serverTimestamp(),
+    } satisfies Pick<
+      FirestoreChatThread,
+      "pending_handoff_confirmation" | "pending_handoff_body" | "pending_handoff_category" | "updated_at"
+    > & { updated_at: unknown },
+    { merge: true },
+  );
 }
 
 export async function getGuestMessagesFromStore(
@@ -1957,6 +2039,62 @@ export async function postGuestMessageToStore(
     const existingAiThread = existingThread;
     const aiThreadData = existingThreadData;
 
+    if (
+      existingAiThread &&
+      aiThreadData?.pending_handoff_confirmation &&
+      aiThreadData.pending_handoff_body
+    ) {
+      if (isGuestAffirmative(trimmedBody)) {
+        await clearAiPendingHandoff(existingAiThread.id);
+        const pendingGuestPayload = await buildTranslationPayload({
+          displayBody: aiThreadData.pending_handoff_body,
+          guestLanguage: resolvedGuestLanguage,
+          frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+        });
+
+        return handoffGuestReplyFromAiMessage(
+          stayStatus,
+          aiThreadData.pending_handoff_body,
+          pendingGuestPayload,
+          aiThreadData.pending_handoff_category ?? aiThreadData.category ?? null,
+        );
+      }
+
+      if (isGuestNegative(trimmedBody)) {
+        const threadId = existingAiThread.id;
+
+        await addMessage(stayStatus, threadId, "guest", guestPayload);
+
+        const declinedPayload = await buildTranslationPayload({
+          displayBody: copy.handoffConfirmationDeclined,
+          guestLanguage: stayStatus.selectedLanguage,
+          originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+          displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+          frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+        });
+
+        await addMessage(stayStatus, threadId, "ai", declinedPayload);
+        await updateAiThreadMetadata(
+          threadId,
+          stayStatus,
+          copy.handoffConfirmationDeclined,
+          "ai",
+        );
+
+        return {
+          ok: true as const,
+          threadId,
+          messages: [
+            buildRuntimeMessage("guest", guestPayload),
+            buildRuntimeMessage("ai", declinedPayload),
+          ],
+          resolvedMode: "ai" as const,
+        };
+      }
+
+      await clearAiPendingHandoff(existingAiThread.id);
+    }
+
     if (existingAiThread && aiThreadData?.rich_menu_action_type === "ai_message") {
       const aiMessages = await getMessagesByThreadId(existingAiThread.id);
       const hasGuestOrFrontReply = aiMessages.some(
@@ -1982,7 +2120,7 @@ export async function postGuestMessageToStore(
   if (mode === "ai") {
     const aiReply = buildAiReply(stayStatus, trimmedBody);
     const aiPayload = await buildTranslationPayload({
-      displayBody: aiReply,
+      displayBody: aiReply.body,
       guestLanguage: stayStatus.selectedLanguage,
       originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
       displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
@@ -1994,10 +2132,25 @@ export async function postGuestMessageToStore(
       threadId,
       "ai",
       aiPayload,
+      {
+        handoffConfirmation: aiReply.needsHandoffConfirmation,
+      },
     );
 
-    await updateAiThreadMetadata(threadId, stayStatus, aiReply, "ai");
-    responseMessages.push(buildRuntimeMessage("ai", aiPayload));
+    await updateAiThreadMetadata(threadId, stayStatus, aiReply.body, "ai", {
+      pendingHandoffConfirmation: aiReply.needsHandoffConfirmation,
+      pendingHandoffBody: aiReply.needsHandoffConfirmation
+        ? aiReply.pendingHandoffBody ?? trimmedBody
+        : null,
+      pendingHandoffCategory: aiReply.needsHandoffConfirmation
+        ? existingThreadData?.category ?? null
+        : null,
+    });
+    responseMessages.push(
+      buildRuntimeMessage("ai", aiPayload, {
+        handoffConfirmation: aiReply.needsHandoffConfirmation,
+      }),
+    );
   }
 
   if (mode === "human") {

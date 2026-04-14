@@ -10,6 +10,7 @@ import {
 } from "@/lib/guest-contract";
 import {
   getGuestUiCopy,
+  hasGuestAiGuideContent,
   type HearingSheetKnowledge,
   type GuestLanguage,
   type GuestMessage,
@@ -319,6 +320,26 @@ function renderMessageBody(message: DisplayMessage) {
       ) : null}
     </div>
   );
+}
+
+function findActiveHandoffConfirmationMessageId(messages: DisplayMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+
+    if (!message.handoffConfirmation) {
+      continue;
+    }
+
+    const hasLaterGuestReply = messages
+      .slice(index + 1)
+      .some((entry) => entry.sender === "guest");
+
+    if (!hasLaterGuestReply) {
+      return message.id;
+    }
+  }
+
+  return null;
 }
 
 function senderLabel(sender: GuestMessage["sender"], hotelName?: string | null) {
@@ -1653,7 +1674,13 @@ function GuestActionPanel({
   );
 }
 
-function HumanStarter({ language }: { language: GuestLanguage }) {
+function HumanStarter({
+  language,
+  directContactOnly = false,
+}: {
+  language: GuestLanguage;
+  directContactOnly?: boolean;
+}) {
   const ui = getGuestUiCopy(language);
 
   return (
@@ -1662,7 +1689,7 @@ function HumanStarter({ language }: { language: GuestLanguage }) {
         {senderAvatar("front", language).label}
       </div>
       <div className="max-w-[82%] rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:max-w-[48%] xl:max-w-[42%]">
-        {ui.humanStarterMessage}
+        {directContactOnly ? ui.directContactMessage : ui.humanStarterMessage}
       </div>
     </div>
   );
@@ -1683,8 +1710,10 @@ export function GuestChatExperience({
 }: GuestChatExperienceProps) {
   const ui = getGuestUiCopy(language);
   const router = useRouter();
+  const hasAiGuideContent = hasGuestAiGuideContent(knowledge, prompts);
   const [activeMode, setActiveMode] = useState<"ai" | "human">(mode);
   const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
+  const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const removeOptimisticMessage = (messageId: string) => {
     setChatMessages((current) => current.filter((message) => message.id !== messageId));
@@ -1693,6 +1722,10 @@ export function GuestChatExperience({
   const hasGuestMessage = messages.some((message) => message.sender === "guest");
   const hasNonSystemHistory = messages.some(
     (message) => message.sender === "guest" || message.sender === "ai" || message.sender === "front",
+  );
+  const activeHandoffConfirmationMessageId = useMemo(
+    () => findActiveHandoffConfirmationMessageId(messages),
+    [messages],
   );
   const visibleMessages = useMemo(() => {
     if (!hasGuestMessage && activeMode === "ai") {
@@ -1735,6 +1768,55 @@ export function GuestChatExperience({
     ]);
   };
 
+  const submitConfirmationReply = async (body: string) => {
+    if (isQuickReplySubmitting) {
+      return;
+    }
+
+    const trimmed = body.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    const optimisticMessage = createOptimisticMessage("quick-reply", "guest", trimmed);
+    setIsQuickReplySubmitting(true);
+    setChatMessages((current) => [...current, optimisticMessage]);
+
+    try {
+      const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body: trimmed,
+          mode: activeMode,
+        }),
+      });
+
+      const payload = response.ok
+        ? await response.json() as {
+            mode?: "ai" | "human";
+            messages?: GuestMessage[];
+          }
+        : null;
+
+      if (!response.ok) {
+        removeOptimisticMessage(optimisticMessage.id);
+        return;
+      }
+
+      setActiveMode(payload?.mode ?? activeMode);
+      replaceOptimisticMessage(
+        optimisticMessage.id,
+        (payload?.messages ?? []).map((message) => ({ ...message, optimistic: false })),
+      );
+    } finally {
+      setIsQuickReplySubmitting(false);
+    }
+  };
+
   return (
     <>
       <section className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
@@ -1772,7 +1854,10 @@ export function GuestChatExperience({
           />
         ) : null}
         {!hasGuestMessage && activeMode === "human" && !hasNonSystemHistory ? (
-          <HumanStarter language={language} />
+          <HumanStarter
+            language={language}
+            directContactOnly={!hasAiGuideContent}
+          />
         ) : null}
         <div className="space-y-3 lg:space-y-2.5">
           {visibleMessages.map((message, index) => {
@@ -1834,6 +1919,32 @@ export function GuestChatExperience({
                         </div>
                         <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_14px_28px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
                           {renderMessageBody(message)}
+                          {message.sender === "ai" &&
+                          message.handoffConfirmation &&
+                          activeHandoffConfirmationMessageId === message.id ? (
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                type="button"
+                                disabled={message.optimistic || isQuickReplySubmitting}
+                                onClick={() => {
+                                  void submitConfirmationReply(ui.confirmYesLabel);
+                                }}
+                                className="rounded-full border border-[#981d15] bg-[#ad2218] px-3 py-1.5 text-[12px] font-light text-white disabled:opacity-60"
+                              >
+                                {ui.confirmYesLabel}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={message.optimistic || isQuickReplySubmitting}
+                                onClick={() => {
+                                  void submitConfirmationReply(ui.confirmNoLabel);
+                                }}
+                                className="rounded-full border border-[#e7ddd8] bg-[#faf5f1] px-3 py-1.5 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
+                              >
+                                {ui.confirmNoLabel}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                         <div className="mt-1 flex justify-start text-[11px] text-[#8b776e] lg:text-[10px]">
                           <span>{formatTimeLabel(message.timestamp, language)}</span>

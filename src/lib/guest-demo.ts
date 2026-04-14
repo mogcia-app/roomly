@@ -18,6 +18,7 @@ export type GuestMessage = {
   translatedBodyGuest?: string | null;
   translatedLanguageGuest?: string | null;
   translationState?: GuestTranslationState;
+  handoffConfirmation?: boolean;
 };
 
 export type GuestRoomContext = {
@@ -175,6 +176,9 @@ export type GuestUiCopy = {
   roomGuideDescription: string;
   requestPrompt: string;
   humanStarterMessage: string;
+  directContactMessage: string;
+  confirmYesLabel: string;
+  confirmNoLabel: string;
   roomGuideStarterBody: string;
   requestCategories: string[];
 };
@@ -351,6 +355,9 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     roomGuideDescription: "まずはAIがその場でご案内します",
     requestPrompt: "ご依頼内容を選んでください",
     humanStarterMessage: "担当者に接続中です。内容を確認ししだい返信します。",
+    directContactMessage: "ご質問があればお気軽にご連絡ください",
+    confirmYesLabel: "はい",
+    confirmNoLabel: "いいえ",
     roomGuideStarterBody: "館内設備やお部屋の使い方を教えてください。",
     requestCategories: ["歯ブラシ希望", "タオル追加", "清掃・片付け", "その他の依頼"],
   },
@@ -373,6 +380,9 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     roomGuideDescription: "The AI can guide you right away.",
     requestPrompt: "Select your request",
     humanStarterMessage: "Connecting you to the front desk. They will reply shortly.",
+    directContactMessage: "If you have any questions, please feel free to contact us.",
+    confirmYesLabel: "Yes",
+    confirmNoLabel: "No",
     roomGuideStarterBody: "Please tell me about the room and hotel facilities.",
     requestCategories: ["Toothbrush", "Extra towels", "Cleaning", "Other request"],
   },
@@ -395,6 +405,9 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     roomGuideDescription: "AI 会先为您即时说明。",
     requestPrompt: "请选择请求内容",
     humanStarterMessage: "正在为您连接前台，工作人员稍后回复。",
+    directContactMessage: "如有任何问题，请随时联系我们。",
+    confirmYesLabel: "是",
+    confirmNoLabel: "否",
     roomGuideStarterBody: "请介绍一下馆内设施和客房使用方法。",
     requestCategories: ["牙刷", "加送毛巾", "清扫整理", "其他请求"],
   },
@@ -417,6 +430,9 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     roomGuideDescription: "AI 會先即時為您說明。",
     requestPrompt: "請選擇請求內容",
     humanStarterMessage: "正在為您連接前台，工作人員稍後回覆。",
+    directContactMessage: "如有任何問題，請隨時與我們聯繫。",
+    confirmYesLabel: "是",
+    confirmNoLabel: "否",
     roomGuideStarterBody: "請介紹一下館內設施和客房使用方式。",
     requestCategories: ["牙刷", "加送毛巾", "清掃整理", "其他請求"],
   },
@@ -439,10 +455,36 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     roomGuideDescription: "AI가 먼저 바로 안내해 드립니다.",
     requestPrompt: "요청 내용을 선택해 주세요",
     humanStarterMessage: "프런트로 연결 중입니다. 확인 후 답변드리겠습니다.",
+    directContactMessage: "문의 사항이 있으시면 편하게 연락해 주세요.",
+    confirmYesLabel: "예",
+    confirmNoLabel: "아니요",
     roomGuideStarterBody: "객실 사용 방법과 시설 정보를 알려 주세요.",
     requestCategories: ["칫솔", "수건 추가", "청소 / 정리", "기타 요청"],
   },
 };
+
+export function hasGuestAiGuideContent(
+  knowledge: HearingSheetKnowledge | null | undefined,
+  prompts: string[],
+) {
+  return (
+    (knowledge?.frontDeskHours.length ?? 0) > 0 ||
+    (knowledge?.wifi.length ?? 0) > 0 ||
+    (knowledge?.breakfast.length ?? 0) > 0 ||
+    (knowledge?.baths.length ?? 0) > 0 ||
+    (knowledge?.facilities.length ?? 0) > 0 ||
+    (knowledge?.facilityLocations.length ?? 0) > 0 ||
+    (knowledge?.amenities.length ?? 0) > 0 ||
+    (knowledge?.parking.length ?? 0) > 0 ||
+    (knowledge?.emergency.length ?? 0) > 0 ||
+    (knowledge?.faq.length ?? 0) > 0 ||
+    (knowledge?.checkout.length ?? 0) > 0 ||
+    (knowledge?.roomService.length ?? 0) > 0 ||
+    (knowledge?.transport.length ?? 0) > 0 ||
+    (knowledge?.nearbySpots.length ?? 0) > 0 ||
+    prompts.length > 0
+  );
+}
 
 export function getGuestRoomContext(roomId: string): GuestRoomContext | null {
   return roomContexts[roomId] ?? null;

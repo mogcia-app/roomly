@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { GuestChatExperience } from "@/components/guest/GuestChatExperience";
 import {
+  hasGuestAiGuideContent,
   isGuestLanguage,
   type GuestLanguage,
 } from "@/lib/guest-demo";
@@ -134,7 +135,15 @@ export default async function GuestChatPage({
 
   const currentLanguage = sessionLanguage ?? room.selectedLanguage ?? "ja";
 
-  const currentMode = mode === "human" ? "human" : "ai";
+  const hasAiGuideContent = hasGuestAiGuideContent(
+    room.hearingSheetKnowledge,
+    room.hearingSheetPrompts,
+  );
+  const currentMode = hasAiGuideContent
+    ? mode === "human"
+      ? "human"
+      : "ai"
+    : "human";
   const languageSettingsHref = `/guest/${access.accessToken}/language${debug === "1" ? "?debug=1" : ""}`;
   const debugInfo = debug === "1"
     ? {

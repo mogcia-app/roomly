@@ -410,11 +410,15 @@ function normalizeMessage(
       : typeof readAtSource === "string" && readAtSource.trim()
         ? readAtSource
         : null;
+  const guestVisibleBody =
+    message.translated_body_guest?.trim() ||
+    message.body?.trim() ||
+    "";
 
   return {
     id,
     sender: message.sender,
-    body: message.body ?? "",
+    body: guestVisibleBody,
     imageUrl: message.image_url ?? null,
     imageAlt: message.image_alt ?? null,
     timestamp,

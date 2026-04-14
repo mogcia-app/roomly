@@ -7,11 +7,12 @@ import {
 } from "@/lib/guest-demo";
 import { updateGuestThreadLanguage } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
+import { syncGuestLanguageToFrontdeskApi } from "@/lib/server/guest-language-api";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
 
-export async function POST(
+async function handleGuestLanguageUpdate(
   request: Request,
   context: RouteContext<"/api/guest/rooms/[roomId]/language">,
 ) {
@@ -59,12 +60,58 @@ export async function POST(
 
   await setStoredGuestLanguage(access.accessToken, body.language);
   const threadUpdate = await updateGuestThreadLanguage(stayStatus, body.language);
+  let syncedThreadId = threadUpdate.threadId;
+  let syncedStayId = stayStatus.stayId ?? null;
+  let updatedMessages = 0;
+
+  if (threadUpdate.threadId) {
+    try {
+      const syncResult = await syncGuestLanguageToFrontdeskApi({
+        threadId: threadUpdate.threadId,
+        guestLanguage: body.language,
+        retranslateHistory: true,
+      });
+
+      if (syncResult) {
+        syncedThreadId = syncResult.threadId;
+        syncedStayId = syncResult.stayId;
+        updatedMessages = syncResult.updatedMessages;
+      }
+    } catch (error) {
+      console.warn("[guest/language] frontdesk sync failed; using local update only", {
+        threadId: threadUpdate.threadId,
+        language: body.language,
+        error,
+      });
+    }
+  }
 
   return Response.json({
     ok: true,
     language: body.language,
     threadUpdated: threadUpdate.updated,
-    threadId: threadUpdate.threadId,
+    threadId: syncedThreadId,
     threadMode: threadUpdate.mode,
+    updatedMessages,
+    thread: {
+      threadId: syncedThreadId,
+      stayId: syncedStayId,
+      guestLanguage: body.language,
+      updatedMessages,
+    },
   });
+}
+
+export async function POST(
+  request: Request,
+  context: RouteContext<"/api/guest/rooms/[roomId]/language">,
+) {
+  return handleGuestLanguageUpdate(request, context);
+}
+
+export async function PATCH(
+  request: Request,
+  context: RouteContext<"/api/guest/rooms/[roomId]/language">,
+) {
+  return handleGuestLanguageUpdate(request, context);
 }

@@ -2,17 +2,15 @@ import { notFound, redirect } from "next/navigation";
 
 import { GuestLanguageForm } from "@/components/guest/GuestLanguageForm";
 import { GuestShell } from "@/components/guest/GuestShell";
-import { type GuestLanguage } from "@/lib/guest-demo";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
+import { GUEST_LANGUAGE_OPTIONS } from "@/lib/guest-languages";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 type GuestLanguagePageProps = {
   params: Promise<{ roomId: string }>;
   searchParams: Promise<{ debug?: string }>;
 };
-
-const languages: GuestLanguage[] = ["ja", "en", "zh-CN", "zh-TW", "ko"];
 
 export default async function GuestLanguagePage({
   params,
@@ -64,7 +62,7 @@ export default async function GuestLanguagePage({
           hotelName={room.hotelName}
           showHotelName={process.env.NODE_ENV === "production"}
           initialLanguage={room.selectedLanguage}
-          languages={languages}
+          fallbackLanguageOptions={GUEST_LANGUAGE_OPTIONS}
         />
       </main>
     </GuestShell>

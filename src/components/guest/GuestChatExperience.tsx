@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -14,7 +14,9 @@ import {
   type HearingSheetKnowledge,
   type GuestLanguage,
   type GuestMessage,
+  isGuestLanguage,
 } from "@/lib/guest-demo";
+import { updateGuestLanguage } from "@/lib/guest-language-client";
 import {
   type GuestRichMenu,
   type GuestRichMenuItem,
@@ -41,6 +43,10 @@ type GuestChatExperienceProps = {
   prompts: string[];
   initialMessages: GuestMessage[];
   clearThreadQueryOnMount?: boolean;
+  languageUpdateNotice?: {
+    active: boolean;
+    updatedMessages: number;
+  };
 };
 
 type DisplayMessage = GuestMessage & {
@@ -320,6 +326,81 @@ function renderMessageBody(message: DisplayMessage) {
       ) : null}
     </div>
   );
+}
+
+function getTranslationFallbackLabel(language: GuestLanguage) {
+  if (language === "en") {
+    return "Translation pending. Showing the original message.";
+  }
+
+  if (language === "zh-CN") {
+    return "翻译处理中，当前显示原文。";
+  }
+
+  if (language === "zh-TW") {
+    return "翻譯處理中，目前顯示原文。";
+  }
+
+  if (language === "ko") {
+    return "번역을 준비 중입니다. 현재는 원문을 표시합니다.";
+  }
+
+  return "翻訳確認中のため、現在は原文を表示しています。";
+}
+
+function getLanguageUpdateNotice(
+  language: GuestLanguage,
+  updatedMessages: number,
+) {
+  if (language === "en") {
+    return updatedMessages > 0
+      ? `Language updated. Refreshed ${updatedMessages} message(s).`
+      : "Language updated.";
+  }
+
+  if (language === "zh-CN") {
+    return updatedMessages > 0
+      ? `语言已更新，已刷新 ${updatedMessages} 条消息。`
+      : "语言已更新。";
+  }
+
+  if (language === "zh-TW") {
+    return updatedMessages > 0
+      ? `語言已更新，已刷新 ${updatedMessages} 則訊息。`
+      : "語言已更新。";
+  }
+
+  if (language === "ko") {
+    return updatedMessages > 0
+      ? `언어를 변경했고 메시지 ${updatedMessages}건을 새로 반영했습니다.`
+      : "언어를 변경했습니다.";
+  }
+
+  return updatedMessages > 0
+    ? `言語を更新しました。${updatedMessages}件のメッセージを再反映しました。`
+    : "言語を更新しました。";
+}
+
+function areMessagesEquivalent(left: DisplayMessage[], right: DisplayMessage[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((message, index) => {
+    const candidate = right[index];
+
+    return (
+      message.id === candidate?.id &&
+      message.sender === candidate.sender &&
+      message.body === candidate.body &&
+      message.timestamp === candidate.timestamp &&
+      message.readAt === candidate.readAt &&
+      message.imageUrl === candidate.imageUrl &&
+      message.imageAlt === candidate.imageAlt &&
+      message.translationState === candidate.translationState &&
+      message.handoffConfirmation === candidate.handoffConfirmation
+    );
+  });
 }
 
 function findActiveHandoffConfirmationMessageId(messages: DisplayMessage[]) {
@@ -1081,15 +1162,16 @@ function GuestChatInput({
   }
 
   async function switchLanguage(languageCode: string) {
-    return fetch(`/api/guest/rooms/${roomId}/language`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        language: languageCode,
-      }),
-    });
+    if (!isGuestLanguage(languageCode)) {
+      return {
+        ok: false,
+        guestLanguage: language,
+        threadId: null,
+        updatedMessages: 0,
+      };
+    }
+
+    return updateGuestLanguage(roomId, languageCode);
   }
 
   async function submitMessage(body: string) {
@@ -1311,21 +1393,26 @@ function GuestChatInput({
         return;
       }
 
-      if (action.actionType === "language") {
-        if (action.languageCode) {
-          const languageCode = action.languageCode;
-          const response = await switchLanguage(languageCode);
+        if (action.actionType === "language") {
+          if (action.languageCode) {
+            const languageCode = action.languageCode;
+            const response = await switchLanguage(languageCode);
 
-          if (!response.ok) {
-            setError(ui.menuUnavailableError);
+            if (!response.ok) {
+              setError(ui.menuUnavailableError);
+              return;
+            }
+
+            startTransition(() => {
+              const searchParams = new URLSearchParams();
+
+              searchParams.set("lang", response.guestLanguage);
+              searchParams.set("languageUpdated", "1");
+              searchParams.set("updatedMessages", String(response.updatedMessages));
+              router.push(`/guest/${roomId}/chat?${searchParams.toString()}`);
+            });
             return;
           }
-
-          startTransition(() => {
-            router.push(`/guest/${roomId}/chat?lang=${encodeURIComponent(languageCode)}`);
-          });
-          return;
-        }
 
         startTransition(() => {
           router.push(`/guest/${roomId}/language`);
@@ -1707,6 +1794,7 @@ export function GuestChatExperience({
   prompts,
   initialMessages,
   clearThreadQueryOnMount = false,
+  languageUpdateNotice,
 }: GuestChatExperienceProps) {
   const ui = getGuestUiCopy(language);
   const router = useRouter();
@@ -1715,6 +1803,7 @@ export function GuestChatExperience({
   const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+
   const removeOptimisticMessage = (messageId: string) => {
     setChatMessages((current) => current.filter((message) => message.id !== messageId));
   };
@@ -1752,6 +1841,68 @@ export function GuestChatExperience({
 
     router.replace(`/guest/${roomId}/chat?mode=${activeMode}`, { scroll: false });
   }, [activeMode, clearThreadQueryOnMount, roomId, router]);
+
+  const refreshMessages = useEffectEvent(async () => {
+    try {
+      const response = await fetch(`/api/guest/rooms/${roomId}/messages?mode=${activeMode}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json() as { messages?: GuestMessage[] };
+      const fetchedMessages = (payload.messages ?? []).map((message) => ({
+        ...message,
+        optimistic: false,
+      }));
+
+      setChatMessages((current) => {
+        const optimisticMessages = current.filter((message) => message.optimistic);
+        const persistedMessages = current.filter((message) => !message.optimistic);
+
+        if (areMessagesEquivalent(persistedMessages, fetchedMessages)) {
+          return current;
+        }
+
+        return [...fetchedMessages, ...optimisticMessages];
+      });
+    } catch {
+      return;
+    }
+  });
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refreshMessages();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshMessages();
+      }
+    };
+
+    const handleFocus = () => {
+      void refreshMessages();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   const appendMessages = (newMessages: DisplayMessage[]) => {
     if (newMessages.length === 0) {
@@ -1820,6 +1971,11 @@ export function GuestChatExperience({
   return (
     <>
       <section className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
+        {languageUpdateNotice?.active ? (
+          <div className="mb-4 rounded-[18px] border border-[#eadfd8] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
+            {getLanguageUpdateNotice(language, languageUpdateNotice.updatedMessages)}
+          </div>
+        ) : null}
         {debugInfo ? (
           <div className="mb-4 rounded-[18px] border border-[#d9cdc7] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#6a544b]">
             <div className="font-medium text-[#8b4c43]">Debug</div>
@@ -1919,6 +2075,11 @@ export function GuestChatExperience({
                         </div>
                         <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_14px_28px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
                           {renderMessageBody(message)}
+                          {message.sender !== "guest" && message.translationState === "fallback" ? (
+                            <div className="mt-3 rounded-[14px] border border-[#eadfd8] bg-[#f8f2ee] px-3 py-2 text-[12px] font-light leading-5 text-[#8b776e]">
+                              {getTranslationFallbackLabel(language)}
+                            </div>
+                          ) : null}
                           {message.sender === "ai" &&
                           message.handoffConfirmation &&
                           activeHandoffConfirmationMessageId === message.id ? (

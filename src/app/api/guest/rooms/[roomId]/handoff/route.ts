@@ -20,7 +20,11 @@ export async function POST(
 
     try {
       access = await resolveGuestAccess(accessToken);
-    } catch {
+    } catch (error) {
+      console.error("[guest/handoff] invalid room token", {
+        tokenPreview: accessToken.slice(0, 24),
+        error,
+      });
       return Response.json({ error: "INVALID_ROOM_TOKEN" }, { status: 401 });
     }
 

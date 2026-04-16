@@ -37,7 +37,11 @@ export async function GET(
 
     try {
       access = await resolveGuestAccess(accessToken);
-    } catch {
+    } catch (error) {
+      console.error("[guest/messages:get] invalid room token", {
+        tokenPreview: accessToken.slice(0, 24),
+        error,
+      });
       return Response.json({ error: "INVALID_ROOM_TOKEN" }, { status: 401 });
     }
 
@@ -88,7 +92,11 @@ export async function POST(
 
     try {
       access = await resolveGuestAccess(accessToken);
-    } catch {
+    } catch (error) {
+      console.error("[guest/messages] invalid room token", {
+        tokenPreview: accessToken.slice(0, 24),
+        error,
+      });
       return Response.json({ error: "INVALID_ROOM_TOKEN" }, { status: 401 });
     }
 

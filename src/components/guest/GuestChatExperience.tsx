@@ -35,10 +35,8 @@ type GuestChatExperienceProps = {
   } | null;
   roomId: string;
   hotelName?: string | null;
-  roomLabel: string;
   richMenu: GuestRichMenu | null;
   language: GuestLanguage;
-  mode: "ai" | "human";
   knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
   initialMessages: GuestMessage[];
@@ -56,7 +54,6 @@ type DisplayMessage = GuestMessage & {
 type GuestChatComposerProps = {
   roomId: string;
   language: GuestLanguage;
-  mode: "ai" | "human";
   richMenu: GuestRichMenu | null;
   onModeChange: (mode: "ai" | "human") => void;
   onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
@@ -65,18 +62,14 @@ type GuestChatComposerProps = {
   onOptimisticSend: (message: DisplayMessage) => void;
 };
 
-type GuestActionPanelProps = {
+type GuestQaSheetProps = {
   roomId: string;
-  roomLabel?: string;
   language: GuestLanguage;
   knowledge?: HearingSheetKnowledge | null;
-  richMenu?: GuestRichMenu | null;
   prompts: string[];
-  showIntro?: boolean;
-  onModeChange: (mode: "ai" | "human") => void;
-  onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
-  onOptimisticRemove: (messageId: string) => void;
-  onOptimisticSend: (message: DisplayMessage) => void;
+  open: boolean;
+  onClose: () => void;
+  onMessagesAppend: (messages: DisplayMessage[]) => void;
 };
 let optimisticMessageSequence = 0;
 
@@ -553,129 +546,6 @@ function getGuestActionCopy(language: GuestLanguage) {
   };
 }
 
-function buildRichMenuGuideText(
-  language: GuestLanguage,
-  richMenu: GuestRichMenu | null | undefined,
-) {
-  if (!richMenu) {
-    return null;
-  }
-
-  if (richMenu.menuGuideText) {
-    if (language === "ja") {
-      return richMenu.menuGuideText;
-    }
-
-    if (language === "en") {
-      return "You can also use the quick menu below.";
-    }
-
-    if (language === "zh-CN") {
-      return "您也可以使用下方快捷菜单。";
-    }
-
-    if (language === "zh-TW") {
-      return "您也可以使用下方快捷選單。";
-    }
-
-    return "아래 퀵 메뉴도 사용할 수 있습니다.";
-  }
-
-  const labels = (language === "ja"
-    ? richMenu.items
-        .map((item) => item.label?.trim())
-        .filter((label): label is string => Boolean(label))
-        .slice(0, 4)
-    : richMenu.items
-        .map((item) => {
-          const label = item.label?.trim();
-
-          if (!label) {
-            return null;
-          }
-
-          const normalized = normalizeGuideText(label);
-
-          if (["タクシー予約", "タクシー", "taxi", "taxireservation"].includes(normalized)) {
-            return language === "en"
-              ? "Taxi"
-              : language === "zh-CN"
-                ? "出租车"
-                : language === "zh-TW"
-                  ? "計程車"
-                  : "택시";
-          }
-
-          if (["hp", "homepage", "website", "公式サイト"].includes(normalized)) {
-            return language === "en"
-              ? "Website"
-              : language === "zh-CN"
-                ? "官网"
-                : language === "zh-TW"
-                  ? "官網"
-                  : "웹사이트";
-          }
-
-          if (["公式インスタグラム", "インスタグラム", "instagram", "officialinstagram"].includes(normalized)) {
-            return "Instagram";
-          }
-
-          if (["言語", "language"].includes(normalized)) {
-            return language === "en"
-              ? "Language"
-              : language === "zh-CN"
-                ? "语言"
-                : language === "zh-TW"
-                  ? "語言"
-                  : "언어";
-          }
-
-          return null;
-        })
-        .filter((label): label is Exclude<typeof label, null> => label !== null)
-        .slice(0, 4));
-
-  if (labels.length === 0) {
-    if (language === "en") {
-      return "You can also use the quick menu below.";
-    }
-
-    if (language === "zh-CN") {
-      return "您也可以使用下方快捷菜单。";
-    }
-
-    if (language === "zh-TW") {
-      return "您也可以使用下方快捷選單。";
-    }
-
-    if (language === "ko") {
-      return "아래 퀵 메뉴도 사용할 수 있습니다.";
-    }
-
-    return null;
-  }
-
-  const joined = labels.join(" / ");
-
-  if (language === "en") {
-    return `You can also open the quick menu below for ${joined}.`;
-  }
-
-  if (language === "zh-CN") {
-    return `下方快捷菜单中也可以查看 ${joined}。`;
-  }
-
-  if (language === "zh-TW") {
-    return `下方快捷選單中也可以查看 ${joined}。`;
-  }
-
-  if (language === "ko") {
-    return `아래 퀵 메뉴에서도 ${joined} 항목을 열 수 있습니다.`;
-  }
-
-  return `下の館内メニューからも ${joined} を開けます。`;
-}
-
 function normalizeGuideText(value: string) {
   return value
     .toLowerCase()
@@ -684,8 +554,64 @@ function normalizeGuideText(value: string) {
     .trim();
 }
 
-function formatIntroRoomLabel(roomLabel: string, language: GuestLanguage) {
-  return language === "ja" ? `${roomLabel}様` : roomLabel;
+function getLanguageSettingsLabel(language: GuestLanguage) {
+  if (language === "en") {
+    return "Language";
+  }
+
+  if (language === "zh-CN") {
+    return "语言";
+  }
+
+  if (language === "zh-TW") {
+    return "語言";
+  }
+
+  if (language === "ko") {
+    return "언어";
+  }
+
+  return "言語";
+}
+
+function getQaLabel(language: GuestLanguage) {
+  if (language === "en") {
+    return "Q&A";
+  }
+
+  if (language === "zh-CN") {
+    return "问答";
+  }
+
+  if (language === "zh-TW") {
+    return "問答";
+  }
+
+  if (language === "ko") {
+    return "Q&A";
+  }
+
+  return "Q&A";
+}
+
+function getQaHelperText(language: GuestLanguage) {
+  if (language === "en") {
+    return "For hotel information only";
+  }
+
+  if (language === "zh-CN") {
+    return "仅限酒店信息";
+  }
+
+  if (language === "zh-TW") {
+    return "僅限飯店資訊";
+  }
+
+  if (language === "ko") {
+    return "호텔 안내 전용";
+  }
+
+  return "館内案内のみ";
 }
 
 function localizeSupplementalValue(language: GuestLanguage, value: string) {
@@ -1058,7 +984,6 @@ function buildAiGuideOptions(
 function GuestChatInput({
   roomId,
   language,
-  mode,
   richMenu,
   onModeChange,
   onMessagesReplace,
@@ -1190,7 +1115,7 @@ function GuestChatInput({
     setMessage("");
 
     try {
-      const response = await postGuestMessage(trimmed, mode);
+      const response = await postGuestMessage(trimmed, "human");
 
       if (!response.ok) {
         onOptimisticRemove(optimisticMessage.id);
@@ -1198,7 +1123,7 @@ function GuestChatInput({
         return;
       }
 
-      onModeChange(response.mode);
+      onModeChange("human");
       onMessagesReplace(
         optimisticMessage.id,
         response.messages.map((message) => ({ ...message, optimistic: false })),
@@ -1296,7 +1221,6 @@ function GuestChatInput({
           return;
         }
 
-        onModeChange("ai");
         if (optimisticMessage) {
           onMessagesReplace(
             optimisticMessage.id,
@@ -1341,7 +1265,6 @@ function GuestChatInput({
           return;
         }
 
-        onModeChange("ai");
         if (optimisticMessage) {
           onMessagesReplace(
             optimisticMessage.id,
@@ -1536,30 +1459,22 @@ function GuestChatInput({
   );
 }
 
-function GuestActionPanel({
+function GuestQaSheet({
   roomId,
-  roomLabel,
   language,
   knowledge,
-  richMenu,
   prompts,
-  showIntro = false,
-  onModeChange,
-  onMessagesReplace,
-  onOptimisticRemove,
-  onOptimisticSend,
-}: GuestActionPanelProps) {
+  open,
+  onClose,
+  onMessagesAppend,
+}: GuestQaSheetProps) {
   const ui = getGuestUiCopy(language);
   const actionCopy = getGuestActionCopy(language);
   const aiGuideOptions = buildAiGuideOptions(language, knowledge, prompts);
-  const richMenuGuideText = buildRichMenuGuideText(language, richMenu);
-  const [isRequestOptionsOpen, setIsRequestOptionsOpen] = useState(false);
-  const [isAiOptionsOpen, setIsAiOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitLockRef = useRef(false);
-  const [isPending, startTransition] = useTransition();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isBusy = isPending || isSubmitting;
+  const isBusy = isSubmitting;
 
   async function submitAiPrompt(body: string) {
     if (submitLockRef.current) {
@@ -1570,9 +1485,6 @@ function GuestActionPanel({
     setIsSubmitting(true);
     setError(null);
 
-    const optimisticMessage = createOptimisticMessage("starter", "guest", body);
-    onOptimisticSend(optimisticMessage);
-
     try {
       const rawResponse = await fetch(`/api/guest/rooms/${roomId}/messages`, {
         method: "POST",
@@ -1581,182 +1493,87 @@ function GuestActionPanel({
         },
         body: JSON.stringify({
           body,
-          mode: "ai",
+          kind: "ai_starter",
         }),
       });
 
       if (!rawResponse.ok) {
-        onOptimisticRemove(optimisticMessage.id);
         setError(ui.aiStarterError);
         return;
       }
 
       const response = await rawResponse.json() as { messages?: GuestMessage[] };
-      startTransition(() => {
-        onModeChange("ai");
-      });
-      onMessagesReplace(
-        optimisticMessage.id,
+      onMessagesAppend(
         (response.messages ?? []).map((message) => ({ ...message, optimistic: false })),
       );
+      onClose();
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
     }
   }
 
-  async function startHumanRequest(category: string) {
-    if (submitLockRef.current) {
-      return;
-    }
-
-    submitLockRef.current = true;
-    setIsSubmitting(true);
-    setError(null);
-    setIsRequestOptionsOpen(false);
-
-    const optimisticMessage = createOptimisticMessage("handoff-category", "guest", category);
-    onOptimisticSend(optimisticMessage);
-
-    try {
-      const rawResponse = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ category }),
-      });
-
-      if (!rawResponse.ok) {
-        onOptimisticRemove(optimisticMessage.id);
-        setError(ui.handoffError);
-        return;
-      }
-
-      const response = await rawResponse.json() as { messages?: GuestMessage[] };
-      startTransition(() => {
-        onModeChange("human");
-      });
-      onMessagesReplace(
-        optimisticMessage.id,
-        (response.messages ?? []).map((message) => ({ ...message, optimistic: false })),
-      );
-    } finally {
-      submitLockRef.current = false;
-      setIsSubmitting(false);
-    }
+  if (!open) {
+    return null;
   }
 
   return (
-    <div className="mb-5">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-[12px] font-light text-[#6f564b] shadow-[0_8px_20px_rgba(72,47,35,0.06)]">
-          <img
-            src="/icon1.png"
-            alt="AI assistant icon"
-            width={32}
-            height={32}
-            className="h-6 w-6 object-cover"
-          />
-        </div>
-        <div className="max-w-[82%] rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:max-w-[48%] xl:max-w-[42%]">
-          <div className="whitespace-pre-line">
-            {showIntro && roomLabel ? `${formatIntroRoomLabel(roomLabel, language)}\n` : ""}
-            {showIntro ? ui.introMessage : actionCopy.helperBody}
-          </div>
-          {richMenuGuideText ? (
-            <div className="mt-3 rounded-[16px] border border-[#ebe1dc] bg-[#f7f1ec] px-3 py-2 text-[12px] font-light leading-5 text-[#7a6056]">
-              {richMenuGuideText}
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-[rgba(35,24,18,0.26)]">
+      <div
+        className="absolute inset-0"
+        role="button"
+        aria-label="Close Q&A"
+        tabIndex={0}
+        onClick={onClose}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            onClose();
+          }
+        }}
+      />
+      <div className="relative w-full max-w-md rounded-t-[28px] border border-[#eadfd8] bg-[#fffaf7] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(72,47,35,0.18)] lg:max-w-none lg:px-8">
+        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#e2d4cc]" />
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[16px] font-light text-[#251815]">{getQaLabel(language)}</div>
+            <div className="mt-1 text-[12px] leading-5 text-[#7a6056]">
+              {aiGuideOptions.length > 0 ? actionCopy.aiPrompt : actionCopy.aiEmpty}
             </div>
-          ) : null}
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#7a6056]"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {aiGuideOptions.map((option) => (
             <button
+              key={option.key}
               type="button"
               disabled={isBusy}
               onClick={() => {
-                setIsRequestOptionsOpen((current) => !current);
-                setIsAiOptionsOpen(false);
+                void submitAiPrompt(option.prompt);
               }}
-              className="flex w-full items-start rounded-[18px] border border-[#e7ddd8] bg-white px-3.5 py-3 text-left transition disabled:opacity-60"
+              className="rounded-full border border-[#e7ddd8] bg-white px-3.5 py-2 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
             >
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-light text-[#251815]">{ui.deliveryTitle}</div>
-                <div className="mt-0.5 text-xs leading-5 text-[#7a6056]">
-                  {ui.deliveryDescription}
-                </div>
-              </div>
+              {option.label}
             </button>
-            <button
-              type="button"
-              disabled={isBusy}
-              onClick={() => {
-                setIsAiOptionsOpen((current) => !current);
-                setIsRequestOptionsOpen(false);
-              }}
-              className="flex w-full items-start rounded-[18px] border border-[#e7ddd8] bg-[#fffaf7] px-3.5 py-3 text-left transition disabled:opacity-60"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-light text-[#251815]">{ui.roomGuideTitle}</div>
-                <div className="mt-0.5 text-xs leading-5 text-[#7a6056]">
-                  {ui.roomGuideDescription}
-                </div>
-              </div>
-            </button>
-          </div>
-          {isAiOptionsOpen ? (
-            <div className="mt-2 rounded-[18px] border border-[#ebe1dc] bg-[#fffaf7] px-3 py-3">
-              <div className="mb-2 text-[12px] font-light leading-5 text-[#7a554a]">
-                {aiGuideOptions.length > 0 ? actionCopy.aiPrompt : actionCopy.aiEmpty}
-              </div>
-              {aiGuideOptions.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {aiGuideOptions.map((option) => (
-                    <button
-                      key={option.key}
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => {
-                        void submitAiPrompt(option.prompt);
-                        setIsAiOptionsOpen(false);
-                      }}
-                      className="rounded-full border border-[#e7ddd8] bg-white px-3 py-1.5 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {isRequestOptionsOpen ? (
-            <div className="mt-2 rounded-[18px] border border-[#ebe1dc] bg-[#fffaf7] px-3 py-3">
-              <div className="mb-2 text-[12px] font-light text-[#7a554a]">
-                {ui.requestPrompt}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {ui.requestCategories.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => {
-                      void startHumanRequest(category);
-                    }}
-                    className="rounded-full border border-[#e7ddd8] bg-white px-3 py-1.5 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          ))}
         </div>
+        {!aiGuideOptions.length ? (
+          <div className="mt-4 rounded-[18px] border border-[#ebe1dc] bg-white px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
+            {getQaHelperText(language)}
+          </div>
+        ) : null}
+        {error ? (
+          <div className="mt-4 rounded-[16px] border border-[#f2d3cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#ad2218]">
+            {error}
+          </div>
+        ) : null}
       </div>
-      {error ? (
-        <div className="mt-2 ml-[52px] rounded-[16px] border border-[#f2d3cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#ad2218]">
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1786,10 +1603,8 @@ export function GuestChatExperience({
   debugInfo,
   roomId,
   hotelName,
-  roomLabel,
   richMenu,
   language,
-  mode,
   knowledge,
   prompts,
   initialMessages,
@@ -1799,9 +1614,10 @@ export function GuestChatExperience({
   const ui = getGuestUiCopy(language);
   const router = useRouter();
   const hasAiGuideContent = hasGuestAiGuideContent(knowledge, prompts);
-  const [activeMode, setActiveMode] = useState<"ai" | "human">(mode);
+  const [activeMode, setActiveMode] = useState<"ai" | "human">("human");
   const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
+  const [isQaOpen, setIsQaOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const removeOptimisticMessage = (messageId: string) => {
@@ -1833,6 +1649,10 @@ export function GuestChatExperience({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [visibleMessages]);
+
+  useEffect(() => {
+    setActiveMode("human");
+  }, [roomId]);
 
   useEffect(() => {
     if (!clearThreadQueryOnMount) {
@@ -1942,7 +1762,7 @@ export function GuestChatExperience({
         },
         body: JSON.stringify({
           body: trimmed,
-          mode: activeMode,
+          mode: "ai",
         }),
       });
 
@@ -1970,6 +1790,48 @@ export function GuestChatExperience({
 
   return (
     <>
+      <header className="border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
+        <div className="px-4 py-3 lg:px-8">
+          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-light tracking-[0.03em] text-[#6f564b] lg:text-[14px]">
+                {hotelName}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={!hasAiGuideContent}
+              onClick={() => {
+                setIsQaOpen(true);
+              }}
+              className="inline-flex min-w-[72px] shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white px-3 py-1.5 text-[11px] font-light text-[#6f564b] disabled:opacity-50"
+            >
+              {getQaLabel(language)}
+            </button>
+            <button
+              type="button"
+              aria-label={getLanguageSettingsLabel(language)}
+              onClick={() => {
+                router.push(`/guest/${roomId}/language`);
+              }}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#6f564b] transition-colors hover:bg-[#f7f1ec]"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                className="h-3.5 w-3.5 text-[#9c7b6d]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 2.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 0 0 0-15Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.9 7.5h14.2M2.9 12.5h14.2M10 2.8c1.9 1.9 3 4.5 3 7.2s-1.1 5.3-3 7.2m0-14.4C8.1 4.7 7 7.3 7 10s1.1 5.3 3 7.2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
       <section className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
         {languageUpdateNotice?.active ? (
           <div className="mb-4 rounded-[18px] border border-[#eadfd8] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
@@ -1992,24 +1854,7 @@ export function GuestChatExperience({
             </div>
           </div>
         ) : null}
-        {!hasGuestMessage && activeMode === "ai" ? (
-          <GuestActionPanel
-            roomId={roomId}
-            roomLabel={roomLabel}
-            language={language}
-            knowledge={knowledge}
-            richMenu={richMenu}
-            prompts={prompts}
-            showIntro
-            onModeChange={setActiveMode}
-            onMessagesReplace={replaceOptimisticMessage}
-            onOptimisticRemove={removeOptimisticMessage}
-            onOptimisticSend={(message) => {
-              setChatMessages((current) => [...current, message]);
-            }}
-          />
-        ) : null}
-        {!hasGuestMessage && activeMode === "human" && !hasNonSystemHistory ? (
+        {!hasGuestMessage && !hasNonSystemHistory ? (
           <HumanStarter
             language={language}
             directContactOnly={!hasAiGuideContent}
@@ -2117,23 +1962,6 @@ export function GuestChatExperience({
               </div>
             );
           })}
-          {activeMode === "ai" && hasGuestMessage ? (
-            <GuestActionPanel
-              roomId={roomId}
-              roomLabel={roomLabel}
-              language={language}
-              knowledge={knowledge}
-              richMenu={richMenu}
-              prompts={prompts}
-              showIntro
-              onModeChange={setActiveMode}
-              onMessagesReplace={replaceOptimisticMessage}
-              onOptimisticRemove={removeOptimisticMessage}
-              onOptimisticSend={(message) => {
-                setChatMessages((current) => [...current, message]);
-              }}
-            />
-          ) : null}
           <div ref={bottomRef} />
         </div>
       </section>
@@ -2141,7 +1969,6 @@ export function GuestChatExperience({
       <GuestChatInput
         roomId={roomId}
         language={language}
-        mode={activeMode}
         richMenu={richMenu}
         onModeChange={setActiveMode}
         onMessagesReplace={replaceOptimisticMessage}
@@ -2150,6 +1977,17 @@ export function GuestChatExperience({
         onOptimisticSend={(message) => {
           setChatMessages((current) => [...current, message]);
         }}
+      />
+      <GuestQaSheet
+        roomId={roomId}
+        language={language}
+        knowledge={knowledge}
+        prompts={prompts}
+        open={isQaOpen}
+        onClose={() => {
+          setIsQaOpen(false);
+        }}
+        onMessagesAppend={appendMessages}
       />
     </>
   );

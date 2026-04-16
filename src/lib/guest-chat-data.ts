@@ -471,7 +471,7 @@ async function addMessage(
     handoffConfirmation?: boolean;
   },
 ) {
-  await getAdminDb().collection("messages").add({
+  const messageRef = await getAdminDb().collection("messages").add({
     thread_id: threadId,
     stay_id: stayStatus.stayId ?? stayStatus.roomId,
     room_id: stayStatus.roomId,
@@ -489,6 +489,71 @@ async function addMessage(
     handoff_confirmation: options?.handoffConfirmation === true,
     timestamp: FieldValue.serverTimestamp(),
   } satisfies FirestoreMessage & { timestamp: unknown });
+
+  return messageRef.id;
+}
+
+async function notifyFrontdeskGuestMessage(params: {
+  hotelId: string | null | undefined;
+  threadId: string;
+  messageId: string;
+}) {
+  const baseUrl = process.env.ROOMLY_CONSOLE_BASE_URL?.trim();
+  const token = process.env.FRONTDESK_API_BEARER_TOKEN?.trim();
+  const hotelId = params.hotelId?.trim();
+
+  if (!hotelId) {
+    console.error("[frontdesk-push] missing hotelId", {
+      hotelId: params.hotelId ?? null,
+      threadId: params.threadId,
+      messageId: params.messageId,
+    });
+    return;
+  }
+
+  if (!baseUrl || !token) {
+    console.error("[frontdesk-push] config missing", {
+      hotelId,
+      threadId: params.threadId,
+      messageId: params.messageId,
+      hasBaseUrl: Boolean(baseUrl),
+      hasToken: Boolean(token),
+    });
+    return;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/api/public/frontdesk/push-notifications`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        hotelId,
+        threadId: params.threadId,
+        messageId: params.messageId,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.error("[frontdesk-push] request failed", {
+        hotelId,
+        threadId: params.threadId,
+        messageId: params.messageId,
+        status: response.status,
+        error: body,
+      });
+    }
+  } catch (error) {
+    console.error("[frontdesk-push] request error", {
+      hotelId,
+      threadId: params.threadId,
+      messageId: params.messageId,
+      error,
+    });
+  }
 }
 
 function resolveThreadGuestLanguage(
@@ -732,7 +797,7 @@ async function handoffGuestReplyFromAiMessage(
     frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
   });
 
-  await addMessage(stayStatus, threadId, "guest", guestPayload);
+  const guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
   await addMessage(
     stayStatus,
     threadId,
@@ -748,6 +813,11 @@ async function handoffGuestReplyFromAiMessage(
     category ?? undefined,
     existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
   );
+  await notifyFrontdeskGuestMessage({
+    hotelId: stayStatus.hotelId,
+    threadId,
+    messageId: guestMessageId,
+  });
 
   return {
     ok: true as const,
@@ -758,6 +828,42 @@ async function handoffGuestReplyFromAiMessage(
     ],
     resolvedMode: "human" as const,
   };
+}
+
+async function mirrorAiMessageToHumanThread(
+  stayStatus: GuestStayStatus,
+  payload: TranslationPayload,
+  lastMessageBody: string,
+  options?: {
+    category?: string | null;
+    status?: "new" | "in_progress";
+    handoffConfirmation?: boolean;
+  },
+) {
+  const threadId = await ensureThread(stayStatus, "human");
+  const existingHumanThread = await getAdminDb().collection("chat_threads").doc(threadId).get();
+  const existingHumanThreadData = existingHumanThread.data() as FirestoreChatThread | undefined;
+
+  await addMessage(
+    stayStatus,
+    threadId,
+    "ai",
+    payload,
+    {
+      handoffConfirmation: options?.handoffConfirmation === true,
+    },
+  );
+
+  await updateHumanThreadMetadata(
+    threadId,
+    stayStatus,
+    payload.translatedBodyFront ?? lastMessageBody,
+    "ai",
+    options?.category ?? existingHumanThreadData?.category ?? undefined,
+    options?.status ?? (existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new"),
+  );
+
+  return threadId;
 }
 
 export async function ensureGuestHumanThread(stayStatus: GuestStayStatus) {
@@ -983,6 +1089,97 @@ function isFrontDeskHandoffIntent(body: string, normalizedBody: string) {
     normalizedBody.includes("프런트");
 
   return asksToContactFrontDesk && mentionsFrontDesk;
+}
+
+function isLuggageStorageIntent(body: string, normalizedBody: string) {
+  const mentionsLuggage =
+    body.includes("荷物") ||
+    body.includes("手荷物") ||
+    body.includes("スーツケース") ||
+    body.includes("キャリーケース") ||
+    body.includes("짐") ||
+    body.includes("수하물") ||
+    body.includes("行李") ||
+    body.includes("行李箱") ||
+    includesAny(normalizedBody, ["luggage", "baggage", "suitcase", "bags", "bag"]);
+
+  const mentionsStorageOrTiming =
+    body.includes("預か") ||
+    body.includes("保管") ||
+    body.includes("チェックイン前") ||
+    body.includes("チェックインまで") ||
+    body.includes("存放") ||
+    body.includes("寄存") ||
+    body.includes("보관") ||
+    includesAny(normalizedBody, [
+      "storemyluggage",
+      "storeluggage",
+      "luggagestorage",
+      "bagstorage",
+      "keepmyluggage",
+      "holdmyluggage",
+      "holdourluggage",
+      "leaveourbags",
+      "leaveourluggage",
+      "beforecheckin",
+      "untilcheckin",
+      "beforecheckintime",
+    ]);
+
+  return mentionsLuggage && mentionsStorageOrTiming;
+}
+
+function isMaintenanceIssueIntent(body: string, normalizedBody: string) {
+  const mentionsEquipment =
+    body.includes("エアコン") ||
+    body.includes("空調") ||
+    body.includes("冷房") ||
+    body.includes("暖房") ||
+    body.includes("クーラー") ||
+    body.includes("air conditioner") ||
+    body.includes("aircon") ||
+    body.includes("ac ") ||
+    body.includes(" a/c") ||
+    body.includes("냉방") ||
+    body.includes("난방") ||
+    body.includes("空调") ||
+    body.includes("冷氣") ||
+    includesAny(normalizedBody, ["airconditioner", "aircon"]);
+
+  const mentionsIssueOrCheck =
+    body.includes("調子が悪") ||
+    body.includes("壊") ||
+    body.includes("故障") ||
+    body.includes("効かない") ||
+    body.includes("動かない") ||
+    body.includes("見て") ||
+    body.includes("確認して") ||
+    body.includes("確認いただ") ||
+    body.includes("check it") ||
+    body.includes("isn't working") ||
+    body.includes("is not working") ||
+    body.includes("not working properly") ||
+    body.includes("broken") ||
+    body.includes("issue") ||
+    body.includes("problem") ||
+    body.includes("malfunction") ||
+    body.includes("고장") ||
+    body.includes("안 돼") ||
+    body.includes("不工作") ||
+    body.includes("坏了") ||
+    body.includes("故障") ||
+    includesAny(normalizedBody, [
+      "workingproperly",
+      "isntworking",
+      "notworking",
+      "pleasecheck",
+      "checkit",
+      "broken",
+      "problem",
+      "malfunction",
+    ]);
+
+  return mentionsEquipment && mentionsIssueOrCheck;
 }
 
 function buildCharacterNgrams(value: string, size = 2) {
@@ -1648,7 +1845,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
     body.includes("近く") ||
     body.includes("コンビニ") ||
     body.includes("周辺") ||
-    includesAny(normalized, ["nearby", "convenience store", "store"])
+    includesAny(normalized, ["nearby", "convenience store"])
   ) {
     const nearbyReply = takeFormatted(
       matchByName(knowledge?.nearbySpots ?? [], body).map((entry) =>
@@ -1776,7 +1973,14 @@ export async function getGuestMessagesFromStore(
   try {
     const messages = await getMessagesByThreadId(threadId);
     return messages.length > 0 ? messages : fallbackMessages;
-  } catch {
+  } catch (error) {
+    console.error("[guest/messages:get-store] failed; using fallback messages", {
+      roomId: stayStatus.roomId,
+      hotelId: stayStatus.hotelId ?? null,
+      mode,
+      threadId,
+      error,
+    });
     return fallbackMessages;
   }
 }
@@ -1814,7 +2018,14 @@ export async function getGuestThreadStateFromStore(
       threadId: resolvedThreadId,
       messages: messages.length > 0 ? messages : fallbackMessages,
     };
-  } catch {
+  } catch (error) {
+    console.error("[guest/thread-state] failed; using fallback thread state", {
+      roomId: stayStatus.roomId,
+      hotelId: stayStatus.hotelId ?? null,
+      mode,
+      threadId: threadId ?? null,
+      error,
+    });
     return {
       threadId: threadId ?? null,
       messages: fallbackMessages,
@@ -2042,6 +2253,25 @@ export async function postGuestMessageToStore(
   if (mode === "ai") {
     const existingAiThread = existingThread;
     const aiThreadData = existingThreadData;
+    const normalizedBody = normalizeText(trimmedBody);
+
+    if (isLuggageStorageIntent(trimmedBody, normalizedBody)) {
+      return handoffGuestReplyFromAiMessage(
+        stayStatus,
+        trimmedBody,
+        guestPayload,
+        aiThreadData?.category ?? aiThreadData?.rich_menu_label ?? null,
+      );
+    }
+
+    if (isMaintenanceIssueIntent(trimmedBody, normalizedBody)) {
+      return handoffGuestReplyFromAiMessage(
+        stayStatus,
+        trimmedBody,
+        guestPayload,
+        aiThreadData?.category ?? aiThreadData?.rich_menu_label ?? null,
+      );
+    }
 
     if (
       existingAiThread &&
@@ -2066,8 +2296,7 @@ export async function postGuestMessageToStore(
 
       if (isGuestNegative(trimmedBody)) {
         const threadId = existingAiThread.id;
-
-        await addMessage(stayStatus, threadId, "guest", guestPayload);
+        const guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
 
         const declinedPayload = await buildTranslationPayload({
           displayBody: copy.handoffConfirmationDeclined,
@@ -2084,6 +2313,11 @@ export async function postGuestMessageToStore(
           copy.handoffConfirmationDeclined,
           "ai",
         );
+        await notifyFrontdeskGuestMessage({
+          hotelId: stayStatus.hotelId,
+          threadId,
+          messageId: guestMessageId,
+        });
 
         return {
           ok: true as const,
@@ -2117,8 +2351,7 @@ export async function postGuestMessageToStore(
   }
 
   const threadId = existingThread?.id ?? await createThread(stayStatus, mode);
-
-  await addMessage(stayStatus, threadId, "guest", guestPayload);
+  const guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
   const responseMessages: GuestMessage[] = [buildRuntimeMessage("guest", guestPayload)];
 
   if (mode === "ai") {
@@ -2150,11 +2383,25 @@ export async function postGuestMessageToStore(
         ? existingThreadData?.category ?? null
         : null,
     });
+    await mirrorAiMessageToHumanThread(
+      stayStatus,
+      aiPayload,
+      aiReply.body,
+      {
+        category: existingThreadData?.category ?? null,
+        handoffConfirmation: aiReply.needsHandoffConfirmation,
+      },
+    );
     responseMessages.push(
       buildRuntimeMessage("ai", aiPayload, {
         handoffConfirmation: aiReply.needsHandoffConfirmation,
       }),
     );
+    await notifyFrontdeskGuestMessage({
+      hotelId: stayStatus.hotelId,
+      threadId,
+      messageId: guestMessageId,
+    });
   }
 
   if (mode === "human") {
@@ -2181,6 +2428,11 @@ export async function postGuestMessageToStore(
       undefined,
       existingThreadData?.status === "in_progress" ? "in_progress" : "new",
     );
+    await notifyFrontdeskGuestMessage({
+      hotelId: stayStatus.hotelId,
+      threadId,
+      messageId: guestMessageId,
+    });
     responseMessages.push(buildRuntimeMessage("system", waitingPayload));
   }
 
@@ -2229,6 +2481,7 @@ export async function postGuestAiStarterToStore(
   );
 
   await updateAiThreadMetadata(threadId, stayStatus, trimmedBody, "ai");
+  await mirrorAiMessageToHumanThread(stayStatus, aiPayload, trimmedBody);
 
   return {
     ok: true as const,
@@ -2296,6 +2549,14 @@ export async function postGuestAiMessageToStore(
       category: category ?? null,
       richMenuActionType: "ai_message",
       richMenuLabel: category ?? null,
+    },
+  );
+  await mirrorAiMessageToHumanThread(
+    stayStatus,
+    aiPayload,
+    trimmedBody || trimmedImageAlt || "AI message",
+    {
+      category: category ?? null,
     },
   );
 

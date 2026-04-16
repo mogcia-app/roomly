@@ -71,6 +71,14 @@ type GuestQaSheetProps = {
   onClose: () => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
 };
+
+type GuestEmergencySheetProps = {
+  roomId: string;
+  language: GuestLanguage;
+  open: boolean;
+  onClose: () => void;
+  onMessagesAppend: (messages: DisplayMessage[]) => void;
+};
 let optimisticMessageSequence = 0;
 
 function hasRequiredRichMenuField(action: GuestRichMenuItem) {
@@ -612,6 +620,113 @@ function getQaHelperText(language: GuestLanguage) {
   }
 
   return "館内案内のみ";
+}
+
+function getEmergencyLabel(language: GuestLanguage) {
+  if (language === "en") {
+    return "Emergency";
+  }
+  if (language === "zh-CN") {
+    return "紧急";
+  }
+  if (language === "zh-TW") {
+    return "緊急";
+  }
+  if (language === "ko") {
+    return "긴급";
+  }
+  return "緊急";
+}
+
+function getEmergencyModalCopy(language: GuestLanguage) {
+  if (language === "en") {
+    return {
+      title: "Emergency contact",
+      body: "Describe what happened. This message will be sent directly to the front desk with translation for staff.",
+      placeholder: "Example: I feel very sick and cannot stand up. Please come to room 203.",
+      sendLabel: "Send urgently",
+      sendingLabel: "Sending...",
+      closeLabel: "Close emergency dialog",
+      categoryLabel: "Type",
+      error: "Emergency message could not be sent. Please try again.",
+      categories: [
+        { value: "emergency_medical", label: "Medical" },
+        { value: "emergency_fire", label: "Fire / Accident" },
+        { value: "emergency_safety", label: "Safety" },
+        { value: "emergency_other", label: "Other" },
+      ],
+    };
+  }
+  if (language === "zh-CN") {
+    return {
+      title: "紧急联系",
+      body: "请写下发生了什么。消息会直接发送给前台，并附带给工作人员的翻译。",
+      placeholder: "例如：我身体很不舒服，站不起来。请到203房间来。",
+      sendLabel: "紧急发送",
+      sendingLabel: "发送中...",
+      closeLabel: "关闭紧急对话框",
+      categoryLabel: "类型",
+      error: "无法发送紧急消息，请重试。",
+      categories: [
+        { value: "emergency_medical", label: "身体不适" },
+        { value: "emergency_fire", label: "火灾 / 事故" },
+        { value: "emergency_safety", label: "安全问题" },
+        { value: "emergency_other", label: "其他" },
+      ],
+    };
+  }
+  if (language === "zh-TW") {
+    return {
+      title: "緊急聯絡",
+      body: "請寫下發生了什麼。訊息會直接傳送到前台，並附上給工作人員的翻譯。",
+      placeholder: "例如：我身體很不舒服，站不起來。請到203房間來。",
+      sendLabel: "緊急送出",
+      sendingLabel: "傳送中...",
+      closeLabel: "關閉緊急對話框",
+      categoryLabel: "類型",
+      error: "無法送出緊急訊息，請再試一次。",
+      categories: [
+        { value: "emergency_medical", label: "身體不適" },
+        { value: "emergency_fire", label: "火災 / 事故" },
+        { value: "emergency_safety", label: "安全問題" },
+        { value: "emergency_other", label: "其他" },
+      ],
+    };
+  }
+  if (language === "ko") {
+    return {
+      title: "긴급 연락",
+      body: "무슨 일이 있었는지 적어 주세요. 이 내용은 직원이 읽을 수 있도록 번역과 함께 프런트에 바로 전달됩니다.",
+      placeholder: "예: 몸이 너무 아프고 일어설 수 없습니다. 203호로 와 주세요.",
+      sendLabel: "긴급 전송",
+      sendingLabel: "전송 중...",
+      closeLabel: "긴급 창 닫기",
+      categoryLabel: "유형",
+      error: "긴급 메시지를 보내지 못했습니다. 다시 시도해 주세요.",
+      categories: [
+        { value: "emergency_medical", label: "건강 이상" },
+        { value: "emergency_fire", label: "화재 / 사고" },
+        { value: "emergency_safety", label: "안전 문제" },
+        { value: "emergency_other", label: "기타" },
+      ],
+    };
+  }
+  return {
+    title: "緊急連絡",
+    body: "何が起きたかを書いて送信してください。スタッフ向け翻訳付きで、そのままフロントへ届きます。",
+    placeholder: "例: 気分が悪くて立てません。203号室に来てください。",
+    sendLabel: "緊急送信",
+    sendingLabel: "送信中...",
+    closeLabel: "緊急モーダルを閉じる",
+    categoryLabel: "内容",
+    error: "緊急メッセージを送信できませんでした。再度お試しください。",
+    categories: [
+      { value: "emergency_medical", label: "体調不良" },
+      { value: "emergency_fire", label: "火災・事故" },
+      { value: "emergency_safety", label: "安全トラブル" },
+      { value: "emergency_other", label: "その他" },
+    ],
+  };
 }
 
 function localizeSupplementalValue(language: GuestLanguage, value: string) {
@@ -1578,6 +1693,152 @@ function GuestQaSheet({
   );
 }
 
+function GuestEmergencySheet({
+  roomId,
+  language,
+  open,
+  onClose,
+  onMessagesAppend,
+}: GuestEmergencySheetProps) {
+  const copy = getEmergencyModalCopy(language);
+  const [message, setMessage] = useState("");
+  const [category, setCategory] = useState(copy.categories[0]?.value ?? "emergency_other");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setMessage("");
+    setCategory(copy.categories[0]?.value ?? "emergency_other");
+    setError(null);
+    setIsSubmitting(false);
+  }, [copy.categories, open]);
+
+  async function submitEmergency() {
+    const trimmed = message.trim();
+
+    if (!trimmed || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body: trimmed,
+          mode: "human",
+          category,
+        }),
+      });
+
+      if (!response.ok) {
+        setError(copy.error);
+        return;
+      }
+
+      const payload = await response.json() as { messages?: GuestMessage[] };
+      onMessagesAppend((payload.messages ?? []).map((entry) => ({ ...entry, optimistic: false })));
+      onClose();
+    } catch {
+      setError(copy.error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(80,17,17,0.34)]">
+      <div
+        className="absolute inset-0"
+        role="button"
+        aria-label={copy.closeLabel}
+        tabIndex={0}
+        onClick={onClose}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            onClose();
+          }
+        }}
+      />
+      <div className="relative w-full max-w-md rounded-t-[28px] border border-[#f2d4d1] bg-[#fff7f5] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(108,26,26,0.20)] lg:max-w-none lg:px-8">
+        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#efc7c2]" />
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[16px] font-medium text-[#8f231c]">{copy.title}</div>
+            <div className="mt-1 text-[12px] leading-5 text-[#7a6056]">
+              {copy.body}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#f0d4d0] bg-white text-[#8f231c]"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-4">
+          <div className="mb-2 text-[12px] font-light text-[#8f231c]">{copy.categoryLabel}</div>
+          <div className="flex flex-wrap gap-2">
+            {copy.categories.map((entry) => (
+              <button
+                key={entry.value}
+                type="button"
+                onClick={() => setCategory(entry.value)}
+                className={`rounded-full border px-3.5 py-2 text-[12px] font-light ${
+                  category === entry.value
+                    ? "border-[#ad2218] bg-[#ad2218] text-white"
+                    : "border-[#e7ddd8] bg-white text-[#7a554a]"
+                }`}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-4">
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            placeholder={copy.placeholder}
+            rows={5}
+            disabled={isSubmitting}
+            className="w-full resize-none rounded-[18px] border border-[#ead6d2] bg-white px-4 py-3 text-sm leading-6 text-[#33231e] outline-none"
+          />
+        </div>
+        {error ? (
+          <div className="mt-4 rounded-[16px] border border-[#f2d3cd] bg-white px-4 py-3 text-sm text-[#ad2218]">
+            {error}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          disabled={!message.trim() || isSubmitting}
+          onClick={() => {
+            void submitEmergency();
+          }}
+          className="mt-4 flex w-full items-center justify-center rounded-[18px] border border-[#981d15] bg-[#ad2218] px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
+        >
+          {isSubmitting ? copy.sendingLabel : copy.sendLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function HumanStarter({
   language,
   directContactOnly = false,
@@ -1618,6 +1879,7 @@ export function GuestChatExperience({
   const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const [isQaOpen, setIsQaOpen] = useState(false);
+  const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const removeOptimisticMessage = (messageId: string) => {
@@ -1792,7 +2054,7 @@ export function GuestChatExperience({
     <>
       <header className="border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
         <div className="px-4 py-3 lg:px-8">
-          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
             <div className="min-w-0">
               <div className="truncate text-[13px] font-light tracking-[0.03em] text-[#6f564b] lg:text-[14px]">
                 {hotelName}
@@ -1807,6 +2069,15 @@ export function GuestChatExperience({
               className="inline-flex min-w-[72px] shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white px-3 py-1.5 text-[11px] font-light text-[#6f564b] disabled:opacity-50"
             >
               {getQaLabel(language)}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsEmergencyOpen(true);
+              }}
+              className="inline-flex min-w-[72px] shrink-0 items-center justify-center rounded-full border border-[#e7b8b1] bg-[#fff1ef] px-3 py-1.5 text-[11px] font-medium text-[#a02a22]"
+            >
+              {getEmergencyLabel(language)}
             </button>
             <button
               type="button"
@@ -1986,6 +2257,15 @@ export function GuestChatExperience({
         open={isQaOpen}
         onClose={() => {
           setIsQaOpen(false);
+        }}
+        onMessagesAppend={appendMessages}
+      />
+      <GuestEmergencySheet
+        roomId={roomId}
+        language={language}
+        open={isEmergencyOpen}
+        onClose={() => {
+          setIsEmergencyOpen(false);
         }}
         onMessagesAppend={appendMessages}
       />

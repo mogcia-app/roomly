@@ -951,6 +951,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "Please connect me to the front desk.",
       handoffWaiting: "The front desk has been notified. Please wait for a reply.",
+      emergencyWaiting: "Emergency alert sent to the front desk. Please move to a safe place and wait for assistance.",
       handoffConfirmationPrompt: "I can't confirm this with AI alone. Would you like me to forward this message to the front desk?",
       handoffConfirmationDeclined: "Understood. If you need anything else, please send another message.",
       taxiHandoffPrompt: "Taxi request received. Please send the date and time, destination, and any notes for the front desk.",
@@ -964,6 +965,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "请帮我联系前台。",
       handoffWaiting: "已通知前台，请等待回复。",
+      emergencyWaiting: "已向前台发送紧急通知。请优先确保安全，并在安全地点等待协助。",
       handoffConfirmationPrompt: "这项内容仅靠 AI 无法确认。要我将这条消息转给前台吗？",
       handoffConfirmationDeclined: "好的。如还有其他问题，请继续发送消息。",
       taxiHandoffPrompt: "已收到叫车需求。请发送乘车日期时间、目的地，以及需要注意的事项，前台会跟进。",
@@ -977,6 +979,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "請幫我聯繫前台。",
       handoffWaiting: "已通知前台，請等待回覆。",
+      emergencyWaiting: "已向前台發送緊急通知。請優先確保安全，並在安全地點等待協助。",
       handoffConfirmationPrompt: "這項內容僅靠 AI 無法確認。要我將這則訊息轉給前台嗎？",
       handoffConfirmationDeclined: "好的。如果還有其他問題，請再傳送訊息。",
       taxiHandoffPrompt: "已收到叫車需求。請傳送搭乘日期時間、目的地，以及需要注意的事項，前台會協助處理。",
@@ -990,6 +993,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
     return {
       handoffRequest: "프런트로 연결해 주세요.",
       handoffWaiting: "프런트에 알렸습니다. 답변을 기다려 주세요.",
+      emergencyWaiting: "긴급 상황을 프런트에 전달했습니다. 안전을 먼저 확보하고 안전한 장소에서 도움을 기다려 주세요.",
       handoffConfirmationPrompt: "이 내용은 AI만으로 확인할 수 없습니다. 이 메시지를 프런트로 전달할까요?",
       handoffConfirmationDeclined: "알겠습니다. 다른 문의가 있으면 다시 메시지를 보내 주세요.",
       taxiHandoffPrompt: "택시 요청을 접수했습니다. 이용 일시, 목적지, 전달 사항을 보내 주시면 프런트가 확인합니다.",
@@ -1002,6 +1006,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
   return {
     handoffRequest: "フロント対応をお願いします。",
     handoffWaiting: "フロントへ通知しました。返信をお待ちください。",
+    emergencyWaiting: "緊急連絡をフロントへ通知しました。安全を確保した場所でお待ちください。",
     handoffConfirmationPrompt: "この内容をフロントへおつなぎしてもいいですか？",
     handoffConfirmationDeclined: "承知しました。ほかにご質問があればそのままお送りください。",
     taxiHandoffPrompt: "タクシー手配を承りました。フロントへ送るため、以下をご記入ください。\n・ご利用日時\n・行き先\n・注意事項",
@@ -2220,6 +2225,9 @@ export async function postGuestMessageToStore(
   stayStatus: GuestStayStatus,
   mode: ThreadMode,
   body: string,
+  options?: {
+    category?: string | null;
+  },
 ) {
   const trimmedBody = body.trim();
 
@@ -2380,7 +2388,7 @@ export async function postGuestMessageToStore(
         ? aiReply.pendingHandoffBody ?? trimmedBody
         : null,
       pendingHandoffCategory: aiReply.needsHandoffConfirmation
-        ? existingThreadData?.category ?? null
+        ? options?.category ?? existingThreadData?.category ?? null
         : null,
     });
     await mirrorAiMessageToHumanThread(
@@ -2388,7 +2396,7 @@ export async function postGuestMessageToStore(
       aiPayload,
       aiReply.body,
       {
-        category: existingThreadData?.category ?? null,
+        category: options?.category ?? existingThreadData?.category ?? null,
         handoffConfirmation: aiReply.needsHandoffConfirmation,
       },
     );
@@ -2405,8 +2413,11 @@ export async function postGuestMessageToStore(
   }
 
   if (mode === "human") {
+    const waitingBody = options?.category?.startsWith("emergency_")
+      ? copy.emergencyWaiting
+      : copy.handoffWaiting;
     const waitingPayload = await buildTranslationPayload({
-      displayBody: copy.handoffWaiting,
+      displayBody: waitingBody,
       guestLanguage: resolvedGuestLanguage,
       originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
       displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
@@ -2425,7 +2436,7 @@ export async function postGuestMessageToStore(
       stayStatus,
       guestPayload.translatedBodyFront ?? trimmedBody,
       "guest",
-      undefined,
+      options?.category ?? undefined,
       existingThreadData?.status === "in_progress" ? "in_progress" : "new",
     );
     await notifyFrontdeskGuestMessage({

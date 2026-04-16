@@ -138,7 +138,9 @@ export async function POST(
               translations: payload.translations,
             },
           )
-        : await postGuestMessageToStore(stayStatus, mode, payload.body ?? "");
+        : await postGuestMessageToStore(stayStatus, mode, payload.body ?? "", {
+            category: payload.category ?? null,
+          });
 
     if (!result.ok) {
       return Response.json({ error: result.error }, { status: 400 });

@@ -1073,6 +1073,19 @@ function buildAiGuideOptions(
     coveredPromptPrefixes.add("フロント対応");
   }
 
+  if (knowledge?.faq.length) {
+    options.push(
+      ...knowledge.faq
+        .map((entry) => entry.question?.trim() ?? "")
+        .filter((question) => question.length > 0)
+        .map((question) => ({
+          key: `faq:${question}`,
+          label: localizeSupplementalPrompt(language, question),
+          prompt: question,
+        })),
+    );
+  }
+
   const existingPrompts = new Set(options.map((option) => option.prompt));
 
   return [

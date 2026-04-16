@@ -977,15 +977,15 @@ function getLocalizedServerCopy(language: GuestLanguage) {
 
   if (language === "zh-TW") {
     return {
-      handoffRequest: "請幫我聯繫前台。",
-      handoffWaiting: "已通知前台，請等待回覆。",
-      emergencyWaiting: "已向前台發送緊急通知。請優先確保安全，並在安全地點等待協助。",
-      handoffConfirmationPrompt: "這項內容僅靠 AI 無法確認。要我將這則訊息轉給前台嗎？",
+      handoffRequest: "請幫我聯繫櫃台。",
+      handoffWaiting: "已通知櫃台，請等待回覆。",
+      emergencyWaiting: "已向櫃台發送緊急通知。請優先確保安全，並在安全地點等待協助。",
+      handoffConfirmationPrompt: "這項內容僅靠 AI 無法確認。要我將這則訊息轉給櫃台嗎？",
       handoffConfirmationDeclined: "好的。如果還有其他問題，請再傳送訊息。",
-      taxiHandoffPrompt: "已收到叫車需求。請傳送搭乘日期時間、目的地，以及需要注意的事項，前台會協助處理。",
-      frontDeskFallback: "此內容 AI 無法確認。請使用下方的「送達 / 請求」發送給前台，或切換為人工處理。",
-      handoffGuidance: "如果您想請前台幫您確認，請使用下方的「送達 / 請求」送出需求，之後可切換為人工處理。",
-      emergencyFallback: "未找到已登記的緊急聯絡方式，請立即聯絡前台。",
+      taxiHandoffPrompt: "已收到叫車需求。請傳送搭乘日期時間、目的地，以及需要注意的事項，櫃台會協助處理。",
+      frontDeskFallback: "此內容 AI 無法確認。請使用下方的「送達 / 請求」發送給櫃台，或切換為人工處理。",
+      handoffGuidance: "如果您想請櫃台幫您確認，請使用下方的「送達 / 請求」送出需求，之後可切換為人工處理。",
+      emergencyFallback: "未找到已登記的緊急聯絡方式，請立即聯絡櫃台。",
     };
   }
 

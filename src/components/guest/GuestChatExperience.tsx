@@ -439,8 +439,10 @@ function senderAvatar(sender: GuestMessage["sender"], language: GuestLanguage) {
         label:
           language === "en"
             ? "F"
-            : language === "zh-CN" || language === "zh-TW"
+            : language === "zh-CN"
               ? "前"
+              : language === "zh-TW"
+                ? "櫃"
               : language === "ko"
                 ? "프"
                 : "フ",
@@ -940,12 +942,12 @@ function getAiGuideLabel(language: GuestLanguage, key: AiGuideOption["key"]) {
     facility: { ja: "館内施設", en: "Facilities", "zh-CN": "馆内设施", "zh-TW": "館內設施", ko: "시설" },
     amenity: { ja: "アメニティ", en: "Amenities", "zh-CN": "备品", "zh-TW": "備品", ko: "어메니티" },
     parking: { ja: "駐車場", en: "Parking", "zh-CN": "停车场", "zh-TW": "停車場", ko: "주차장" },
-    checkout: { ja: "チェックアウト", en: "Checkout", "zh-CN": "退房", "zh-TW": "退房", ko: "체크아웃" },
+    checkout: { ja: "チェックアウト", en: "Checkout", "zh-CN": "退房", "zh-TW": "退房資訊", ko: "체크아웃" },
     emergency: { ja: "緊急時", en: "Emergency", "zh-CN": "紧急情况", "zh-TW": "緊急情況", ko: "긴급" },
     roomService: { ja: "ルームサービス", en: "Room service", "zh-CN": "客房服务", "zh-TW": "客房服務", ko: "룸서비스" },
-    transport: { ja: "交通案内", en: "Transport", "zh-CN": "交通", "zh-TW": "交通", ko: "교통" },
+    transport: { ja: "交通案内", en: "Transport", "zh-CN": "交通", "zh-TW": "交通資訊", ko: "교통" },
     nearby: { ja: "周辺案内", en: "Nearby spots", "zh-CN": "周边信息", "zh-TW": "周邊資訊", ko: "주변 안내" },
-    frontDesk: { ja: "フロント対応", en: "Front desk", "zh-CN": "前台", "zh-TW": "前台", ko: "프런트" },
+    frontDesk: { ja: "フロント対応", en: "Front desk", "zh-CN": "前台", "zh-TW": "櫃台", ko: "프런트" },
   };
 
   return labels[key][language];
@@ -963,7 +965,7 @@ function buildAiGuideOptions(
     options.push({
       key: "wifi",
       label: getAiGuideLabel(language, "wifi"),
-      prompt: getLocalizedGuidePrompt(language, "wifi"),
+      prompt: getLocalizedGuidePrompt("ja", "wifi"),
     });
     coveredPromptPrefixes.add("wi-fi");
     coveredPromptPrefixes.add("wifi");
@@ -973,7 +975,7 @@ function buildAiGuideOptions(
     options.push({
       key: "breakfast",
       label: getAiGuideLabel(language, "breakfast"),
-      prompt: getLocalizedGuidePrompt(language, "breakfast"),
+      prompt: getLocalizedGuidePrompt("ja", "breakfast"),
     });
     coveredPromptPrefixes.add("朝食");
   }
@@ -983,7 +985,7 @@ function buildAiGuideOptions(
     options.push({
       key: "bath",
       label: getAiGuideLabel(language, "bath"),
-      prompt: getLocalizedGuidePrompt(language, "bath", language === "ja" ? bathName : undefined),
+      prompt: getLocalizedGuidePrompt("ja", "bath", bathName),
     });
     coveredPromptPrefixes.add("大浴場");
     coveredPromptPrefixes.add(normalizeGuideText(bathName));
@@ -993,7 +995,7 @@ function buildAiGuideOptions(
     options.push({
       key: "facility",
       label: getAiGuideLabel(language, "facility"),
-      prompt: getLocalizedGuidePrompt(language, "facility"),
+      prompt: getLocalizedGuidePrompt("ja", "facility"),
     });
     coveredPromptPrefixes.add("館内施設");
   }
@@ -1002,7 +1004,7 @@ function buildAiGuideOptions(
     options.push({
       key: "amenity",
       label: getAiGuideLabel(language, "amenity"),
-      prompt: getLocalizedGuidePrompt(language, "amenity"),
+      prompt: getLocalizedGuidePrompt("ja", "amenity"),
     });
     coveredPromptPrefixes.add("アメニティ");
   }
@@ -1011,7 +1013,7 @@ function buildAiGuideOptions(
     options.push({
       key: "parking",
       label: getAiGuideLabel(language, "parking"),
-      prompt: getLocalizedGuidePrompt(language, "parking"),
+      prompt: getLocalizedGuidePrompt("ja", "parking"),
     });
     coveredPromptPrefixes.add("駐車場");
   }
@@ -1020,7 +1022,7 @@ function buildAiGuideOptions(
     options.push({
       key: "checkout",
       label: getAiGuideLabel(language, "checkout"),
-      prompt: getLocalizedGuidePrompt(language, "checkout"),
+      prompt: getLocalizedGuidePrompt("ja", "checkout"),
     });
     coveredPromptPrefixes.add("チェックアウト");
   }
@@ -1029,7 +1031,7 @@ function buildAiGuideOptions(
     options.push({
       key: "emergency",
       label: getAiGuideLabel(language, "emergency"),
-      prompt: getLocalizedGuidePrompt(language, "emergency"),
+      prompt: getLocalizedGuidePrompt("ja", "emergency"),
     });
   }
 
@@ -1037,7 +1039,7 @@ function buildAiGuideOptions(
     options.push({
       key: "roomService",
       label: getAiGuideLabel(language, "roomService"),
-      prompt: getLocalizedGuidePrompt(language, "roomService"),
+      prompt: getLocalizedGuidePrompt("ja", "roomService"),
     });
   }
 
@@ -1045,7 +1047,7 @@ function buildAiGuideOptions(
     options.push({
       key: "transport",
       label: getAiGuideLabel(language, "transport"),
-      prompt: getLocalizedGuidePrompt(language, "transport"),
+      prompt: getLocalizedGuidePrompt("ja", "transport"),
     });
     coveredPromptPrefixes.add("交通");
     coveredPromptPrefixes.add("交通案内");
@@ -1055,7 +1057,7 @@ function buildAiGuideOptions(
     options.push({
       key: "nearby",
       label: getAiGuideLabel(language, "nearby"),
-      prompt: getLocalizedGuidePrompt(language, "nearby"),
+      prompt: getLocalizedGuidePrompt("ja", "nearby"),
     });
     coveredPromptPrefixes.add("周辺");
     coveredPromptPrefixes.add("周辺案内");
@@ -1065,7 +1067,7 @@ function buildAiGuideOptions(
     options.push({
       key: "frontDesk",
       label: getAiGuideLabel(language, "frontDesk"),
-      prompt: getLocalizedGuidePrompt(language, "frontDesk"),
+      prompt: getLocalizedGuidePrompt("ja", "frontDesk"),
     });
     coveredPromptPrefixes.add("フロント");
     coveredPromptPrefixes.add("フロント対応");
@@ -1091,7 +1093,7 @@ function buildAiGuideOptions(
       .map((prompt) => ({
         key: `prompt:${prompt}`,
         label: localizeSupplementalPrompt(language, prompt),
-        prompt: localizeSupplementalPrompt(language, prompt),
+        prompt,
       })),
   ];
 }
@@ -1112,9 +1114,33 @@ function GuestChatInput({
   const [error, setError] = useState<string | null>(null);
   const [isRichMenuOpen, setIsRichMenuOpen] = useState(false);
   const submitLockRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
   const isBusy = isPending || isSubmitting;
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    const handleFocus = () => {
+      window.setTimeout(() => {
+        textarea.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+        });
+      }, 120);
+    };
+
+    textarea.addEventListener("focus", handleFocus);
+
+    return () => {
+      textarea.removeEventListener("focus", handleFocus);
+    };
+  }, []);
 
   async function postGuestMessage(body: string, nextMode: "ai" | "human") {
     const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
@@ -1544,13 +1570,17 @@ function GuestChatInput({
           <div className="flex items-center gap-2 p-2">
             <div className="flex h-10 flex-1 items-center border border-[#e7ddd8] bg-white">
               <textarea
+                ref={textareaRef}
                 id="guest-message"
                 rows={1}
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder={ui.messagePlaceholder}
+                enterKeyHint="send"
+                autoCapitalize="sentences"
+                autoCorrect="on"
                 disabled={isBusy}
-                className="h-10 flex-1 resize-none bg-white px-3 py-2 text-sm leading-5 text-[#5f463d] outline-none"
+                className="h-10 flex-1 resize-none bg-white px-3 py-2 text-base leading-6 text-[#5f463d] outline-none lg:text-sm lg:leading-5"
               />
             </div>
             <button
@@ -1880,6 +1910,7 @@ export function GuestChatExperience({
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const [isQaOpen, setIsQaOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const removeOptimisticMessage = (messageId: string) => {
@@ -1915,6 +1946,27 @@ export function GuestChatExperience({
   useEffect(() => {
     setActiveMode("human");
   }, [roomId]);
+
+  useEffect(() => {
+    const visualViewport = window.visualViewport;
+
+    if (!visualViewport) {
+      return;
+    }
+
+    const updateViewportHeight = () => {
+      setViewportHeight(Math.round(visualViewport.height + visualViewport.offsetTop));
+    };
+
+    updateViewportHeight();
+    visualViewport.addEventListener("resize", updateViewportHeight);
+    visualViewport.addEventListener("scroll", updateViewportHeight);
+
+    return () => {
+      visualViewport.removeEventListener("resize", updateViewportHeight);
+      visualViewport.removeEventListener("scroll", updateViewportHeight);
+    };
+  }, []);
 
   useEffect(() => {
     if (!clearThreadQueryOnMount) {
@@ -2051,7 +2103,10 @@ export function GuestChatExperience({
   };
 
   return (
-    <>
+    <div
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      style={viewportHeight ? { height: `${viewportHeight}px` } : undefined}
+    >
       <header className="border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
         <div className="px-4 py-3 lg:px-8">
           <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
@@ -2062,11 +2117,10 @@ export function GuestChatExperience({
             </div>
             <button
               type="button"
-              disabled={!hasAiGuideContent}
               onClick={() => {
                 setIsQaOpen(true);
               }}
-              className="inline-flex min-w-[72px] shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white px-3 py-1.5 text-[11px] font-light text-[#6f564b] disabled:opacity-50"
+              className="inline-flex min-w-[72px] shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white px-3 py-1.5 text-[11px] font-light text-[#6f564b]"
             >
               {getQaLabel(language)}
             </button>
@@ -2103,7 +2157,7 @@ export function GuestChatExperience({
         </div>
       </header>
 
-      <section className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
+      <section className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
         {languageUpdateNotice?.active ? (
           <div className="mb-4 rounded-[18px] border border-[#eadfd8] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
             {getLanguageUpdateNotice(language, languageUpdateNotice.updatedMessages)}
@@ -2269,6 +2323,6 @@ export function GuestChatExperience({
         }}
         onMessagesAppend={appendMessages}
       />
-    </>
+    </div>
   );
 }

@@ -348,14 +348,14 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     aiStarterError: "AIへの問い合わせ開始に失敗しました。再度お試しください。",
     handoffError: "フロントへの通知に失敗しました。再度お試しください。",
     menuUnavailableError: "このメニューは現在ご利用いただけません。フロントへご確認ください。",
-    introMessage: "ご用件をお聞かせください。内容に合わせてご案内します。",
+    introMessage: "スタッフへのご依頼は、このチャットに入力してください。\n館内案内はヘッダーの「Q&A」から確認できます。",
     deliveryTitle: "お届け・ご依頼",
     deliveryDescription: "アメニティ追加などをフロントへ送ります",
     roomGuideTitle: "館内・お部屋のご案内",
     roomGuideDescription: "まずはAIがその場でご案内します",
     requestPrompt: "ご依頼内容を選んでください",
-    humanStarterMessage: "スタッフへのご依頼は、このチャットにそのまま入力してください。",
-    directContactMessage: "スタッフへのご依頼は、このチャットにそのまま入力してください。",
+    humanStarterMessage: "スタッフへのご依頼は、このチャットに入力してください。\n館内案内はヘッダーの「Q&A」から確認できます。",
+    directContactMessage: "スタッフへのご依頼は、このチャットに入力してください。\n館内案内はヘッダーの「Q&A」から確認できます。",
     confirmYesLabel: "はい",
     confirmNoLabel: "いいえ",
     roomGuideStarterBody: "館内設備やお部屋の使い方を教えてください。",
@@ -373,14 +373,14 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     aiStarterError: "Could not start the AI chat. Please try again.",
     handoffError: "Could not notify the front desk. Please try again.",
     menuUnavailableError: "This menu is currently unavailable. Please check with the front desk.",
-    introMessage: "How can we help? We will guide you based on your request.",
+    introMessage: "Type your request in this chat to contact the staff.\nFor hotel information, use “Q&A” in the header.",
     deliveryTitle: "Delivery / Request",
     deliveryDescription: "Send an amenity request to the front desk.",
     roomGuideTitle: "Room / Facility Guide",
     roomGuideDescription: "The AI can guide you right away.",
     requestPrompt: "Select your request",
-    humanStarterMessage: "Please type your request here to contact the staff.",
-    directContactMessage: "Please type your request here to contact the staff.",
+    humanStarterMessage: "Type your request in this chat to contact the staff.\nFor hotel information, use “Q&A” in the header.",
+    directContactMessage: "Type your request in this chat to contact the staff.\nFor hotel information, use “Q&A” in the header.",
     confirmYesLabel: "Yes",
     confirmNoLabel: "No",
     roomGuideStarterBody: "Please tell me about the room and hotel facilities.",
@@ -398,14 +398,14 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     aiStarterError: "无法开始 AI 对话，请重试。",
     handoffError: "无法通知前台，请重试。",
     menuUnavailableError: "该菜单当前不可用。请向前台确认。",
-    introMessage: "请告诉我们您的需求。我们会根据内容为您提供帮助。",
+    introMessage: "如需联系工作人员，请直接在此聊天中输入。\n馆内信息请通过顶部的“Q&A”查看。",
     deliveryTitle: "送达 / 请求",
     deliveryDescription: "可向前台发送备品追加等请求。",
     roomGuideTitle: "馆内 / 客房说明",
     roomGuideDescription: "AI 会先为您即时说明。",
     requestPrompt: "请选择请求内容",
-    humanStarterMessage: "如需联系工作人员，请直接在此聊天中输入。",
-    directContactMessage: "如需联系工作人员，请直接在此聊天中输入。",
+    humanStarterMessage: "如需联系工作人员，请直接在此聊天中输入。\n馆内信息请通过顶部的“Q&A”查看。",
+    directContactMessage: "如需联系工作人员，请直接在此聊天中输入。\n馆内信息请通过顶部的“Q&A”查看。",
     confirmYesLabel: "是",
     confirmNoLabel: "否",
     roomGuideStarterBody: "请介绍一下馆内设施和客房使用方法。",
@@ -414,7 +414,7 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
   "zh-TW": {
     todayLabel: "今天",
     aiLabel: "AI",
-    frontLabel: "前台",
+    frontLabel: "櫃台",
     sendLabel: "發送",
     sendingLabel: "發送中...",
     readLabel: "已讀",
@@ -423,14 +423,14 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     aiStarterError: "無法開始 AI 對話，請再試一次。",
     handoffError: "無法通知前台，請再試一次。",
     menuUnavailableError: "此選單目前無法使用。請向前台確認。",
-    introMessage: "請告訴我們您的需求。我們會依內容為您提供協助。",
+    introMessage: "如需聯絡工作人員，請直接在此聊天中輸入。\n館內資訊請透過頂部的「Q&A」查看。",
     deliveryTitle: "送達 / 請求",
     deliveryDescription: "可向前台發送備品追加等請求。",
     roomGuideTitle: "館內 / 客房說明",
     roomGuideDescription: "AI 會先即時為您說明。",
     requestPrompt: "請選擇請求內容",
-    humanStarterMessage: "如需聯絡工作人員，請直接在此聊天中輸入。",
-    directContactMessage: "如需聯絡工作人員，請直接在此聊天中輸入。",
+    humanStarterMessage: "如需聯絡工作人員，請直接在此聊天中輸入。\n館內資訊請透過頂部的「Q&A」查看。",
+    directContactMessage: "如需聯絡工作人員，請直接在此聊天中輸入。\n館內資訊請透過頂部的「Q&A」查看。",
     confirmYesLabel: "是",
     confirmNoLabel: "否",
     roomGuideStarterBody: "請介紹一下館內設施和客房使用方式。",
@@ -448,14 +448,14 @@ const guestUiCopy: Record<GuestLanguage, GuestUiCopy> = {
     aiStarterError: "AI 대화를 시작하지 못했습니다. 다시 시도해 주세요.",
     handoffError: "프런트에 알리지 못했습니다. 다시 시도해 주세요.",
     menuUnavailableError: "이 메뉴는 현재 사용할 수 없습니다. 프런트로 확인해 주세요.",
-    introMessage: "원하시는 내용을 알려 주세요. 내용에 맞게 안내해 드립니다.",
+    introMessage: "직원에게 요청할 내용은 이 채팅에 입력해 주세요.\n호텔 안내는 상단의 “Q&A”에서 확인할 수 있습니다.",
     deliveryTitle: "배달 / 요청",
     deliveryDescription: "어메니티 추가 요청 등을 프런트로 보낼 수 있습니다.",
     roomGuideTitle: "객실 / 시설 안내",
     roomGuideDescription: "AI가 먼저 바로 안내해 드립니다.",
     requestPrompt: "요청 내용을 선택해 주세요",
-    humanStarterMessage: "직원에게 요청할 내용은 이 채팅에 바로 입력해 주세요.",
-    directContactMessage: "직원에게 요청할 내용은 이 채팅에 바로 입력해 주세요.",
+    humanStarterMessage: "직원에게 요청할 내용은 이 채팅에 입력해 주세요.\n호텔 안내는 상단의 “Q&A”에서 확인할 수 있습니다.",
+    directContactMessage: "직원에게 요청할 내용은 이 채팅에 입력해 주세요.\n호텔 안내는 상단의 “Q&A”에서 확인할 수 있습니다.",
     confirmYesLabel: "예",
     confirmNoLabel: "아니요",
     roomGuideStarterBody: "객실 사용 방법과 시설 정보를 알려 주세요.",
@@ -537,7 +537,7 @@ export function getGuestThread(
             : language === "zh-CN"
               ? "前台已加入聊天。"
               : language === "zh-TW"
-                ? "前台已加入聊天。"
+                ? "櫃台已加入聊天。"
               : language === "ko"
                 ? "프런트가 채팅에 참여했습니다."
                 : "フロントがチャットに参加しました。",
@@ -552,7 +552,7 @@ export function getGuestThread(
             : language === "zh-CN"
               ? "这里是前台。请输入您的需求。"
               : language === "zh-TW"
-                ? "這裡是前台。請輸入您的需求。"
+                ? "這裡是櫃台。請輸入您的需求。"
               : language === "ko"
                 ? "프런트입니다. 요청 내용을 입력해 주세요."
                 : "フロントです。ご依頼内容を入力してください。",

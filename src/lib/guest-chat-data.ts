@@ -105,6 +105,12 @@ type OpenAiTranslationResponse = {
 
 type ManualTranslations = Partial<Record<GuestLanguage, string>>;
 
+type FrontdeskReplyOptions = {
+  imageUrl?: string | null;
+  imageAlt?: string | null;
+  manualTranslations?: ManualTranslations;
+};
+
 function resolveGuestLanguage(language: GuestLanguage | null | undefined) {
   return language ?? "ja";
 }
@@ -776,6 +782,92 @@ async function updateAiThreadMetadata(
     },
     { merge: true },
   );
+}
+
+async function updateFrontThreadMetadata(
+  threadId: string,
+  stayStatus: GuestStayStatus,
+  lastMessageBody: string,
+) {
+  const roomDisplayName = resolveRoomDisplayName({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+    display_name: stayStatus.roomDisplayName ?? stayStatus.roomLabel,
+  });
+  const roomNumber = resolveRoomNumber({
+    room_id: stayStatus.roomId,
+    room_number: stayStatus.roomNumber,
+  });
+
+  await getAdminDb().collection("chat_threads").doc(threadId).set(
+    {
+      stay_id: stayStatus.stayId ?? stayStatus.roomId,
+      room_id: stayStatus.roomId,
+      room_display_name: roomDisplayName,
+      room_number: roomNumber,
+      hotel_id: stayStatus.hotelId ?? null,
+      guest_language: stayStatus.selectedLanguage,
+      last_message_body: lastMessageBody,
+      last_message_at: FieldValue.serverTimestamp(),
+      last_message_sender: "front" as const,
+      updated_at: FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
+    } satisfies Pick<
+      FirestoreChatThread,
+      | "stay_id"
+      | "room_id"
+      | "room_display_name"
+      | "room_number"
+      | "hotel_id"
+      | "guest_language"
+      | "last_message_body"
+      | "last_message_sender"
+      | "updated_at"
+      | "created_at"
+    > & {
+      last_message_at: unknown;
+      updated_at: unknown;
+      created_at: unknown;
+    },
+    { merge: true },
+  );
+}
+
+function buildThreadStayStatus(
+  thread: FirestoreChatThread | undefined,
+): GuestStayStatus | null {
+  const roomId = thread?.room_id ?? thread?.roomId;
+
+  if (!roomId?.trim()) {
+    return null;
+  }
+
+  const roomDisplayName = thread?.room_display_name ?? thread?.roomDisplayName ?? null;
+  const roomNumber = thread?.room_number ?? thread?.roomNumber ?? null;
+  const roomLabel = roomDisplayName?.trim() || roomNumber?.trim() || roomId;
+  const guestLanguage =
+    thread?.guest_language === "ja" ||
+    thread?.guest_language === "en" ||
+    thread?.guest_language === "zh-CN" ||
+    thread?.guest_language === "zh-TW" ||
+    thread?.guest_language === "ko"
+      ? thread.guest_language
+      : "ja";
+
+  return {
+    roomId,
+    roomLabel,
+    roomDisplayName,
+    roomNumber,
+    hotelName: "",
+    stayActive: true,
+    translationEnabled: guestLanguage !== "ja",
+    hearingSheetPrompts: [],
+    hearingSheetKnowledge: undefined,
+    hotelId: thread?.hotel_id ?? null,
+    stayId: thread?.stay_id ?? thread?.stayId ?? roomId,
+    selectedLanguage: guestLanguage,
+  };
 }
 
 async function handoffGuestReplyFromAiMessage(
@@ -2102,6 +2194,76 @@ export async function markGuestThreadMessagesRead(
   return {
     ok: true as const,
     updatedCount: docsToUpdate.length,
+  };
+}
+
+export async function postFrontdeskMessageToStore(
+  threadId: string,
+  body: string,
+  options?: FrontdeskReplyOptions,
+) {
+  const trimmedBody = body.trim();
+  const trimmedImageUrl = options?.imageUrl?.trim() ?? "";
+  const trimmedImageAlt = options?.imageAlt?.trim() ?? "";
+  const sourceBody = trimmedBody || trimmedImageAlt || "Front desk image";
+
+  if (!trimmedBody && !trimmedImageUrl) {
+    return { ok: false as const, error: "EMPTY_MESSAGE" };
+  }
+
+  if (!hasFirebaseAdminCredentials()) {
+    return {
+      ok: true as const,
+      threadId,
+      message: buildRuntimeMessage("front", {
+        body: sourceBody,
+        imageUrl: trimmedImageUrl || null,
+        imageAlt: trimmedImageAlt || null,
+        originalBody: sourceBody,
+        originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+        translatedBodyFront: sourceBody,
+        translatedLanguageFront: GUEST_FRONT_DESK_LANGUAGE,
+        translatedBodyGuest: sourceBody,
+        translatedLanguageGuest: GUEST_FRONT_DESK_LANGUAGE,
+        translationState: "fallback",
+      }),
+    };
+  }
+
+  const threadSnapshot = await getAdminDb().collection("chat_threads").doc(threadId).get();
+
+  if (!threadSnapshot.exists) {
+    return { ok: false as const, error: "THREAD_NOT_FOUND" };
+  }
+
+  const threadData = threadSnapshot.data() as FirestoreChatThread | undefined;
+  const stayStatus = buildThreadStayStatus(threadData);
+
+  if (!stayStatus) {
+    return { ok: false as const, error: "THREAD_ROOM_NOT_FOUND" };
+  }
+
+  const guestLanguage = resolveThreadGuestLanguage(threadData, stayStatus);
+  const payload = await buildTranslationPayload({
+    displayBody: sourceBody,
+    originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    displayLanguage: toLanguageCode(guestLanguage),
+    guestLanguage,
+    frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    manualTranslations: options?.manualTranslations,
+  });
+
+  payload.imageUrl = trimmedImageUrl || null;
+  payload.imageAlt = trimmedImageAlt || null;
+
+  const messageId = await addMessage(stayStatus, threadId, "front", payload);
+  await updateFrontThreadMetadata(threadId, stayStatus, sourceBody);
+
+  return {
+    ok: true as const,
+    threadId,
+    messageId,
+    message: buildRuntimeMessage("front", payload),
   };
 }
 

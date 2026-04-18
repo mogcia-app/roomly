@@ -829,6 +829,78 @@ function localizeSupplementalPrompt(language: GuestLanguage, prompt: string) {
   return `${translatedPrefix}: ${suffix}`;
 }
 
+function inferGuidePromptKey(prompt: string): AiGuideOption["key"] | null {
+  const normalized = normalizeGuideText(prompt);
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized.includes("wifi") ||
+    normalized.includes("wi-fi") ||
+    normalized.includes("無線lan") ||
+    normalized.includes("ワイファイ")
+  ) {
+    return "wifi";
+  }
+
+  if (normalized.includes("朝食") || normalized.includes("breakfast")) {
+    return "breakfast";
+  }
+
+  if (
+    normalized.includes("大浴場") ||
+    normalized.includes("浴場") ||
+    normalized.includes("温泉") ||
+    normalized.includes("bath")
+  ) {
+    return "bath";
+  }
+
+  if (normalized.includes("館内施設") || normalized.includes("facility")) {
+    return "facility";
+  }
+
+  if (normalized.includes("アメニティ") || normalized.includes("amenity")) {
+    return "amenity";
+  }
+
+  if (normalized.includes("駐車場") || normalized.includes("parking")) {
+    return "parking";
+  }
+
+  if (
+    normalized.includes("チェックアウト") ||
+    normalized.includes("check-out") ||
+    normalized.includes("checkout")
+  ) {
+    return "checkout";
+  }
+
+  if (normalized.includes("緊急") || normalized.includes("emergency")) {
+    return "emergency";
+  }
+
+  if (normalized.includes("ルームサービス") || normalized.includes("roomservice")) {
+    return "roomService";
+  }
+
+  if (normalized.includes("交通") || normalized.includes("transport")) {
+    return "transport";
+  }
+
+  if (normalized.includes("周辺") || normalized.includes("nearby")) {
+    return "nearby";
+  }
+
+  if (normalized.includes("フロント") || normalized.includes("frontdesk")) {
+    return "frontDesk";
+  }
+
+  return null;
+}
+
 function getLocalizedGuidePrompt(
   language: GuestLanguage,
   key: AiGuideOption["key"],
@@ -836,18 +908,18 @@ function getLocalizedGuidePrompt(
 ) : string {
   if (language === "en") {
     const prompts: Record<AiGuideOption["key"], string> = {
-      wifi: "Please tell me about Wi-Fi.",
-      breakfast: "Please tell me about breakfast.",
-      bath: bathName ? `Please tell me about ${bathName}.` : "Please tell me about the bath.",
-      facility: "Please tell me about the hotel facilities.",
-      amenity: "Please tell me about the amenities.",
-      parking: "Please tell me about parking.",
-      checkout: "Please tell me about checkout.",
-      emergency: "Please tell me about emergency information.",
-      roomService: "Please tell me about room service.",
-      transport: "Please tell me about transportation.",
-      nearby: "Please tell me about nearby spots.",
-      frontDesk: "Please tell me the front desk hours.",
+      wifi: "Can you tell me about the Wi-Fi?",
+      breakfast: "Can you tell me about breakfast?",
+      bath: bathName ? `Can you tell me about ${bathName}?` : "Can you tell me about the bath?",
+      facility: "Can you tell me about the hotel facilities?",
+      amenity: "Can you tell me about the amenities?",
+      parking: "Can you tell me about parking?",
+      checkout: "Can you tell me about checkout?",
+      emergency: "Can you tell me about emergency information?",
+      roomService: "Can you tell me about room service?",
+      transport: "Can you tell me about transportation?",
+      nearby: "Can you tell me about nearby spots?",
+      frontDesk: "Can you tell me the front desk hours?",
     };
 
     return prompts[key];
@@ -1078,11 +1150,21 @@ function buildAiGuideOptions(
       ...knowledge.faq
         .map((entry) => entry.question?.trim() ?? "")
         .filter((question) => question.length > 0)
-        .map((question) => ({
-          key: `faq:${question}`,
-          label: localizeSupplementalPrompt(language, question),
-          prompt: question,
-        })),
+        .filter((question) => {
+          const inferredKey = inferGuidePromptKey(question);
+          return !inferredKey || !options.some((option) => option.key === inferredKey);
+        })
+        .map((question) => {
+          const inferredKey = inferGuidePromptKey(question);
+
+          return {
+            key: `faq:${question}`,
+            label: inferredKey
+              ? getLocalizedGuidePrompt(language, inferredKey)
+              : localizeSupplementalPrompt(language, question),
+            prompt: question,
+          };
+        }),
     );
   }
 

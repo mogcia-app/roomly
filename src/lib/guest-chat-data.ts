@@ -2635,15 +2635,27 @@ export async function postGuestAiStarterToStore(
     };
   }
 
-  const threadId = await createThread(stayStatus, "ai");
-  const aiPayload = await buildTranslationPayload({
+  const existingThread = await findThread(stayStatus, "ai");
+  const existingThreadData = existingThread?.data() as FirestoreChatThread | undefined;
+  const resolvedGuestLanguage = resolveThreadGuestLanguage(existingThreadData, stayStatus);
+  const guestPayload = await buildTranslationPayload({
     displayBody: trimmedBody,
-    guestLanguage: stayStatus.selectedLanguage,
+    guestLanguage: resolvedGuestLanguage,
     originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
-    displayLanguage: toLanguageCode(stayStatus.selectedLanguage),
+    displayLanguage: toLanguageCode(resolvedGuestLanguage),
     frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
     protectedTerms: options?.protectedTerms,
     manualTranslations: options?.translations,
+  });
+  const threadId = existingThread?.id ?? await createThread(stayStatus, "ai");
+  const guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
+  const aiReply = buildAiReply(stayStatus, trimmedBody);
+  const aiPayload = await buildTranslationPayload({
+    displayBody: aiReply.body,
+    guestLanguage: resolvedGuestLanguage,
+    originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    displayLanguage: toLanguageCode(resolvedGuestLanguage),
+    frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
   });
 
   await addMessage(
@@ -2651,15 +2663,34 @@ export async function postGuestAiStarterToStore(
     threadId,
     "ai",
     aiPayload,
+    {
+      handoffConfirmation: aiReply.needsHandoffConfirmation,
+    },
   );
 
-  await updateAiThreadMetadata(threadId, stayStatus, trimmedBody, "ai");
-  await mirrorAiMessageToHumanThread(stayStatus, aiPayload, trimmedBody);
+  await updateAiThreadMetadata(threadId, stayStatus, aiReply.body, "ai", {
+    pendingHandoffConfirmation: aiReply.needsHandoffConfirmation,
+    pendingHandoffBody: aiReply.needsHandoffConfirmation ? aiReply.pendingHandoffBody ?? trimmedBody : null,
+    pendingHandoffCategory: null,
+  });
+  await mirrorAiMessageToHumanThread(stayStatus, aiPayload, aiReply.body, {
+    handoffConfirmation: aiReply.needsHandoffConfirmation,
+  });
+  await notifyFrontdeskGuestMessage({
+    hotelId: stayStatus.hotelId,
+    threadId,
+    messageId: guestMessageId,
+  });
 
   return {
     ok: true as const,
     threadId,
-    messages: [buildRuntimeMessage("ai", aiPayload)],
+    messages: [
+      buildRuntimeMessage("guest", guestPayload),
+      buildRuntimeMessage("ai", aiPayload, {
+        handoffConfirmation: aiReply.needsHandoffConfirmation,
+      }),
+    ],
     resolvedMode: "ai" as const,
   };
 }

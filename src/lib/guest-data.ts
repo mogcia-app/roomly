@@ -71,6 +71,23 @@ type FirestoreStay = {
   hotelId?: string;
 };
 
+type FirestoreChatThread = {
+  stay_id?: string;
+  stayId?: string;
+  room_id?: string;
+  roomId?: string;
+  mode?: "ai" | "human";
+  handoff_status?: "none" | "requested" | "accepted" | null;
+  handoffStatus?: "none" | "requested" | "accepted" | null;
+  unread_count_front?: unknown;
+  unreadCountFront?: unknown;
+  unread_count_guest?: unknown;
+  unreadCountGuest?: unknown;
+  updated_at?: unknown;
+  created_at?: unknown;
+  last_message_at?: unknown;
+};
+
 type FirestoreHearingSheet = {
   categories?: Record<string, unknown>;
   [key: string]: unknown;
@@ -726,6 +743,110 @@ async function findActiveStayByRoomId(roomId: string) {
   return null;
 }
 
+function toTimestampMillis(value: unknown) {
+  return typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+    ? value.toDate().getTime()
+    : 0;
+}
+
+function resolveThreadMetaValue(thread: FirestoreChatThread | null | undefined) {
+  const handoffStatus =
+    thread?.handoff_status === "none" ||
+    thread?.handoff_status === "requested" ||
+    thread?.handoff_status === "accepted"
+      ? thread.handoff_status
+      : thread?.handoffStatus === "none" ||
+          thread?.handoffStatus === "requested" ||
+          thread?.handoffStatus === "accepted"
+        ? thread.handoffStatus
+        : null;
+  const unreadCountFront =
+    typeof thread?.unread_count_front === "number"
+      ? thread.unread_count_front
+      : typeof thread?.unreadCountFront === "number"
+        ? thread.unreadCountFront
+        : null;
+  const unreadCountGuest =
+    typeof thread?.unread_count_guest === "number"
+      ? thread.unread_count_guest
+      : typeof thread?.unreadCountGuest === "number"
+        ? thread.unreadCountGuest
+        : null;
+
+  return {
+    handoffStatus,
+    unreadCountFront,
+    unreadCountGuest,
+  };
+}
+
+async function findLatestThreadMeta(
+  roomId: string,
+  stayId?: string | null,
+) {
+  const db = getAdminDb();
+  const candidates: FirestoreChatThread[] = [];
+
+  if (stayId) {
+    for (const fieldName of ["stay_id", "stayId"] as const) {
+      const snapshot = await db.collection("chat_threads").where(fieldName, "==", stayId).get();
+      candidates.push(...snapshot.docs.map((doc) => doc.data() as FirestoreChatThread));
+    }
+  }
+
+  for (const fieldName of ["room_id", "roomId"] as const) {
+    const snapshot = await db.collection("chat_threads").where(fieldName, "==", roomId).get();
+    candidates.push(...snapshot.docs.map((doc) => doc.data() as FirestoreChatThread));
+  }
+
+  if (candidates.length === 0) {
+    return {
+      handoffStatus: null,
+      unreadCountFront: null,
+      unreadCountGuest: null,
+    };
+  }
+
+  const latestHumanThread =
+    candidates
+      .filter((thread) => thread.mode === "human")
+      .sort((left, right) =>
+        Math.max(
+          toTimestampMillis(right.updated_at),
+          toTimestampMillis(right.last_message_at),
+          toTimestampMillis(right.created_at),
+        ) -
+        Math.max(
+          toTimestampMillis(left.updated_at),
+          toTimestampMillis(left.last_message_at),
+          toTimestampMillis(left.created_at),
+        ),
+      )[0] ?? null;
+
+  if (latestHumanThread) {
+    return resolveThreadMetaValue(latestHumanThread);
+  }
+
+  const latestThread =
+    candidates.sort((left, right) =>
+      Math.max(
+        toTimestampMillis(right.updated_at),
+        toTimestampMillis(right.last_message_at),
+        toTimestampMillis(right.created_at),
+      ) -
+      Math.max(
+        toTimestampMillis(left.updated_at),
+        toTimestampMillis(left.last_message_at),
+        toTimestampMillis(left.created_at),
+      ),
+    )[0] ?? null;
+
+  return resolveThreadMetaValue(latestThread);
+}
+
 async function findHearingSheetByHotelId(hotelId: string | null) {
   if (!hotelId) {
     return null;
@@ -844,6 +965,7 @@ export async function getGuestStayStatusFromStore(
     const prompts = buildPromptCandidates(mergedKnowledge);
     const roomNumber = resolveRoomNumber(roomRecord.data);
     const roomDisplayName = resolveRoomDisplayName(roomRecord.data);
+    const threadMeta = await findLatestThreadMeta(roomId, activeStay?.id ?? null);
 
     console.info("[guest/data] resolved stay status", {
       roomId,
@@ -876,9 +998,9 @@ export async function getGuestStayStatusFromStore(
       hearingSheetKnowledge: mergedKnowledge,
       roomFloor: toRoomFloor(roomRecord.data) ?? fallbackRoom?.roomFloor ?? null,
       selectedLanguage: stayLanguage ?? selectedLanguage,
-      handoffStatus: null,
-      unreadCountFront: null,
-      unreadCountGuest: null,
+      handoffStatus: threadMeta.handoffStatus,
+      unreadCountFront: threadMeta.unreadCountFront,
+      unreadCountGuest: threadMeta.unreadCountGuest,
     };
   } catch (error) {
     console.error("[guest/data] failed to resolve stay status", {

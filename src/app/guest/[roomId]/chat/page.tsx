@@ -115,8 +115,8 @@ export default async function GuestChatPage({
   ]);
 
   return (
-    <div className="min-h-screen bg-[#f4f5f8]">
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#f6efe8] shadow-[0_0_0_1px_rgba(0,0,0,0.03)] lg:max-w-none lg:shadow-none">
+    <div className="h-[100dvh] overflow-hidden bg-[#f4f5f8]">
+      <main className="mx-auto flex h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-[#f6efe8] shadow-[0_0_0_1px_rgba(0,0,0,0.03)] lg:max-w-none lg:shadow-none">
         <GuestChatExperience
           key={`${threadState.mode}:${threadState.messages.at(-1)?.id ?? "empty"}:${threadState.messages.length}`}
           roomId={access.accessToken}

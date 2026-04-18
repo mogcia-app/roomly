@@ -1637,7 +1637,7 @@ function GuestChatInput({
   }
 
   return (
-    <section className="sticky bottom-0 z-20 bg-transparent px-0 pb-0">
+    <section className="z-20 min-h-0 bg-transparent px-0 pb-0">
       {richMenu ? (
         <div
           className={`grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out ${
@@ -1684,8 +1684,8 @@ function GuestChatInput({
         </div>
       ) : null}
 
-      <div className="border-t border-[#e7ddd8] bg-white">
-        <div className="flex items-center gap-2 px-3 pb-2 pt-2 lg:px-8">
+      <div className="border-t border-[#e7ddd8] bg-white pb-[max(env(safe-area-inset-bottom),0px)]">
+        <div className="flex items-end gap-2 px-3 pb-2 pt-2 lg:px-8">
         <button
           type="button"
           aria-expanded={isRichMenuOpen}
@@ -1711,12 +1711,12 @@ function GuestChatInput({
           </span>
         </button>
 
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <label htmlFor="guest-message" className="sr-only">
             メッセージ
           </label>
-          <div className="flex items-center gap-2 p-2">
-            <div className="flex h-10 flex-1 items-center border border-[#e7ddd8] bg-white">
+          <div className="flex items-end gap-2 p-2">
+            <div className="flex min-h-[40px] flex-1 items-end border border-[#e7ddd8] bg-white">
               <textarea
                 ref={textareaRef}
                 id="guest-message"
@@ -1952,8 +1952,11 @@ function GuestEmergencySheet({
         }}
       />
       <div
-        className="relative z-10 w-full max-w-md rounded-t-[28px] border border-[#f2d4d1] bg-[#fff7f5] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(108,26,26,0.20)] lg:max-w-none lg:px-8"
+        className="pointer-events-auto relative z-10 w-full max-w-md rounded-t-[28px] border border-[#f2d4d1] bg-[#fff7f5] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(108,26,26,0.20)] [touch-action:auto] lg:max-w-none lg:px-8"
         onClick={(event) => {
+          event.stopPropagation();
+        }}
+        onTouchStart={(event) => {
           event.stopPropagation();
         }}
       >
@@ -2000,6 +2003,9 @@ function GuestEmergencySheet({
             rows={5}
             autoFocus
             disabled={isSubmitting}
+            onTouchStart={(event) => {
+              event.stopPropagation();
+            }}
             className="w-full resize-none rounded-[18px] border border-[#ead6d2] bg-white px-4 py-3 text-sm leading-6 text-[#33231e] outline-none"
           />
         </div>
@@ -2307,8 +2313,8 @@ export function GuestChatExperience({
   const showHandoffBanner = handoffStatus === "requested" || handoffStatus === "accepted";
 
   return (
-    <div className="flex h-[100dvh] min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="sticky top-0 z-20 border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <header className="z-20 border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
         <div className="px-4 py-3 lg:px-8">
           <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
             <div className="min-w-0">
@@ -2363,7 +2369,7 @@ export function GuestChatExperience({
         </div>
       </header>
 
-      <section className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
+      <section className="min-h-0 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 [scrollbar-gutter:stable] [webkit-overflow-scrolling:touch] lg:px-8 lg:py-6">
         {showHandoffBanner ? (
           <div className="mb-4 rounded-[18px] border border-[#eadfd8] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
             {getHandoffStatusNotice(language, handoffStatus)}

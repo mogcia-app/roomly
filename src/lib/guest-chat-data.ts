@@ -2298,14 +2298,10 @@ export async function requestHumanHandoff(
       message.sender === "guest" &&
       message.body === guestBody,
   );
+  let guestMessageId: string | null = null;
 
   if (!hasGuestRequest) {
-    const guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
-    await notifyFrontdeskGuestMessage({
-      hotelId: stayStatus.hotelId,
-      threadId,
-      messageId: guestMessageId,
-    });
+    guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
   }
 
   const responseMessages: GuestMessage[] = hasGuestRequest
@@ -2328,14 +2324,21 @@ export async function requestHumanHandoff(
       waitingPayload,
     );
 
-    await updateHumanThreadMetadata(
-      threadId,
-      stayStatus,
-      copy.handoffWaiting,
-      "system",
-      undefined,
-      existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
-    );
+    if (!hasGuestRequest && guestMessageId) {
+      await updateHumanThreadMetadata(
+        threadId,
+        stayStatus,
+        guestPayload.translatedBodyFront ?? guestBody,
+        "guest",
+        undefined,
+        existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
+      );
+      await notifyFrontdeskGuestMessage({
+        hotelId: stayStatus.hotelId,
+        threadId,
+        messageId: guestMessageId,
+      });
+    }
 
     return {
       ok: true as const,
@@ -2353,6 +2356,14 @@ export async function requestHumanHandoff(
     category,
     existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
   );
+
+  if (!hasGuestRequest && guestMessageId) {
+    await notifyFrontdeskGuestMessage({
+      hotelId: stayStatus.hotelId,
+      threadId,
+      messageId: guestMessageId,
+    });
+  }
 
   if (category && isTaxiHandoffCategory(category)) {
     const taxiPromptBody = copy.taxiHandoffPrompt;
@@ -2558,7 +2569,7 @@ export async function postGuestMessageToStore(
         ? options?.category ?? existingThreadData?.category ?? null
         : null,
     });
-    await mirrorAiMessageToHumanThread(
+    const humanThreadId = await mirrorAiMessageToHumanThread(
       stayStatus,
       aiPayload,
       aiReply.body,
@@ -2574,7 +2585,7 @@ export async function postGuestMessageToStore(
     );
     await notifyFrontdeskGuestMessage({
       hotelId: stayStatus.hotelId,
-      threadId,
+      threadId: humanThreadId,
       messageId: guestMessageId,
     });
   }
@@ -2678,12 +2689,12 @@ export async function postGuestAiStarterToStore(
     pendingHandoffBody: aiReply.needsHandoffConfirmation ? aiReply.pendingHandoffBody ?? trimmedBody : null,
     pendingHandoffCategory: null,
   });
-  await mirrorAiMessageToHumanThread(stayStatus, aiPayload, aiReply.body, {
+  const humanThreadId = await mirrorAiMessageToHumanThread(stayStatus, aiPayload, aiReply.body, {
     handoffConfirmation: aiReply.needsHandoffConfirmation,
   });
   await notifyFrontdeskGuestMessage({
     hotelId: stayStatus.hotelId,
-    threadId,
+    threadId: humanThreadId,
     messageId: guestMessageId,
   });
 

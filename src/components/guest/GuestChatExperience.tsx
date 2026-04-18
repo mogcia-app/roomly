@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useEffectEvent, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -1883,6 +1884,14 @@ function GuestEmergencySheet({
   const [category, setCategory] = useState(copy.categories[0]?.value ?? "emergency_other");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => {
+      setMounted(false);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -1933,11 +1942,11 @@ function GuestEmergencySheet({
     }
   }
 
-  if (!open) {
+  if (!open || !mounted) {
     return null;
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(80,17,17,0.34)]">
       <div
         className="absolute inset-0 z-0"
@@ -2025,7 +2034,8 @@ function GuestEmergencySheet({
           {isSubmitting ? copy.sendingLabel : copy.sendLabel}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

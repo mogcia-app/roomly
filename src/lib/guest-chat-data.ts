@@ -2300,7 +2300,12 @@ export async function requestHumanHandoff(
   );
 
   if (!hasGuestRequest) {
-    await addMessage(stayStatus, threadId, "guest", guestPayload);
+    const guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
+    await notifyFrontdeskGuestMessage({
+      hotelId: stayStatus.hotelId,
+      threadId,
+      messageId: guestMessageId,
+    });
   }
 
   const responseMessages: GuestMessage[] = hasGuestRequest

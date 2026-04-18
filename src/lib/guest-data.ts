@@ -149,6 +149,13 @@ function resolveStayLanguage(stay: FirestoreStay | null | undefined) {
   const language =
     stay?.guestLanguage ??
     stay?.guest_language ??
+    stay?.selectedLanguage ??
+    stay?.selected_language ??
+    stay?.preferredLanguage ??
+    stay?.preferred_language ??
+    stay?.guestLocale ??
+    stay?.guest_locale ??
+    stay?.locale ??
     stay?.language;
 
   return isGuestLanguage(language) ? language : null;

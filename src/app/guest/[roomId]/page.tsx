@@ -105,7 +105,15 @@ export default async function GuestEntryPage({
 
   const currentLanguage = preferredLanguage ?? stayStatus.selectedLanguage ?? "ja";
   const copy = getEntryCopy(currentLanguage);
-  const debugSuffix = debug === "1" ? "?debug=1" : "";
+  const nextSearchParams = new URLSearchParams();
+
+  if (debug === "1") {
+    nextSearchParams.set("debug", "1");
+  }
+
+  nextSearchParams.set("lang", currentLanguage);
+
+  const querySuffix = `?${nextSearchParams.toString()}`;
 
   return (
     <GuestShell accent>
@@ -126,13 +134,13 @@ export default async function GuestEntryPage({
 
           <div className="mt-6 grid gap-3">
             <Link
-              href={`/guest/${access.accessToken}/chat${debugSuffix}`}
+              href={`/guest/${access.accessToken}/chat${querySuffix}`}
               className="flex h-14 items-center justify-center rounded-full bg-[#ad2218] text-base font-light text-white"
             >
               {copy.cta}
             </Link>
             <Link
-              href={`/guest/${access.accessToken}/language${debugSuffix}`}
+              href={`/guest/${access.accessToken}/language${querySuffix}`}
               className="flex h-12 items-center justify-center rounded-full border border-[#e7ddd8] bg-white text-sm font-light text-[#6f564b]"
             >
               {copy.changeLanguage}

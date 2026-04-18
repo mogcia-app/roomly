@@ -1,9 +1,9 @@
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import {
-  getGuestThreadStateFromStore,
   postGuestAiMessageToStore,
   postGuestAiStarterToStore,
   postGuestMessageToStore,
+  resolveGuestConversationView,
 } from "@/lib/guest-chat-data";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -57,11 +57,13 @@ export async function GET(
       return Response.json({ error: "ACTIVE_STAY_NOT_FOUND" }, { status: 409 });
     }
 
-    const threadState = await getGuestThreadStateFromStore(stayStatus, mode);
+    const threadState = await resolveGuestConversationView(stayStatus, {
+      requestedMode: mode,
+    });
 
     return Response.json({
       ok: true,
-      mode,
+      mode: threadState.mode,
       threadId: threadState.threadId,
       messages: threadState.messages,
       meta: threadState.meta,

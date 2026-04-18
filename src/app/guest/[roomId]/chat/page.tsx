@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { GuestChatExperience } from "@/components/guest/GuestChatExperience";
-import { getGuestThreadStateFromStore } from "@/lib/guest-chat-data";
+import { resolveGuestConversationView } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getGuestRichMenuByHotelId } from "@/lib/guest-rich-menu";
 import { resolveGuestAccess } from "@/lib/server/room-token";
@@ -23,21 +23,6 @@ type GuestThreadMeta = {
   unreadCountGuest: number | null;
   unreadCountFront: number | null;
 };
-
-function resolveInitialGuestChatMode(
-  handoffStatus: "none" | "requested" | "accepted" | null | undefined,
-  requestedMode?: string,
-) {
-  if (requestedMode === "human" && (handoffStatus === "requested" || handoffStatus === "accepted")) {
-    return "human" as const;
-  }
-
-  if (requestedMode === "ai") {
-    return "ai" as const;
-  }
-
-  return handoffStatus === "requested" || handoffStatus === "accepted" ? "human" as const : "ai" as const;
-}
 
 function summarizeKnowledgeCounts(
   knowledge: NonNullable<Awaited<ReturnType<typeof getGuestActiveStayStatusFromStore>>>["hearingSheetKnowledge"],
@@ -106,7 +91,6 @@ export default async function GuestChatPage({
   }
 
   const currentLanguage = room.selectedLanguage ?? "ja";
-  const currentMode = resolveInitialGuestChatMode(room.handoffStatus, mode);
   const debugInfo = debug === "1"
     ? {
         accessSource: access.source,
@@ -123,7 +107,10 @@ export default async function GuestChatPage({
       }
     : null;
   const [threadState, richMenu] = await Promise.all([
-    getGuestThreadStateFromStore(room, currentMode, threadId ?? null),
+    resolveGuestConversationView(room, {
+      requestedMode: mode === "human" ? "human" : mode === "ai" ? "ai" : null,
+      threadId: threadId ?? null,
+    }),
     getGuestRichMenuByHotelId(room.hotelId),
   ]);
 
@@ -131,7 +118,7 @@ export default async function GuestChatPage({
     <div className="min-h-screen bg-[#f4f5f8]">
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#f6efe8] shadow-[0_0_0_1px_rgba(0,0,0,0.03)] lg:max-w-none lg:shadow-none">
         <GuestChatExperience
-          key={`${currentMode}:${threadState.messages.at(-1)?.id ?? "empty"}:${threadState.messages.length}`}
+          key={`${threadState.mode}:${threadState.messages.at(-1)?.id ?? "empty"}:${threadState.messages.length}`}
           roomId={access.accessToken}
           hotelName={room.hotelName}
           richMenu={richMenu}
@@ -139,7 +126,7 @@ export default async function GuestChatPage({
           knowledge={room.hearingSheetKnowledge}
           prompts={room.hearingSheetPrompts}
           initialMessages={threadState.messages}
-          initialMode={currentMode}
+          initialMode={threadState.mode}
           initialThreadId={threadState.threadId}
           initialThreadMeta={threadState.meta as GuestThreadMeta}
           clearThreadQueryOnMount={Boolean(threadId)}

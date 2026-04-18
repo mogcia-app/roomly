@@ -2127,6 +2127,7 @@ export function GuestChatExperience({
       }
 
       const payload = await response.json() as {
+        mode?: "ai" | "human";
         threadId?: string | null;
         messages?: GuestMessage[];
         meta?: {
@@ -2139,6 +2140,7 @@ export function GuestChatExperience({
         ...message,
         optimistic: false,
       }));
+      setActiveMode(payload.mode ?? activeMode);
       setCurrentThreadId(payload.threadId ?? null);
       setThreadMeta({
         handoffStatus: payload.meta?.handoffStatus ?? null,

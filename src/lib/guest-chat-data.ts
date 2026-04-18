@@ -2227,16 +2227,48 @@ export async function getGuestMessagesFromStore(
   }
 }
 
+export function resolveGuestConversationMode(
+  stayStatus: GuestStayStatus,
+  requestedMode?: ThreadMode | null,
+) {
+  if (requestedMode === "human") {
+    return "human" as const;
+  }
+
+  if (requestedMode === "ai") {
+    return stayStatus.handoffStatus === "requested" || stayStatus.handoffStatus === "accepted"
+      ? "human" as const
+      : "ai" as const;
+  }
+
+  return stayStatus.handoffStatus === "requested" || stayStatus.handoffStatus === "accepted"
+    ? "human" as const
+    : "ai" as const;
+}
+
+export async function resolveGuestConversationView(
+  stayStatus: GuestStayStatus,
+  options?: {
+    requestedMode?: ThreadMode | null;
+    threadId?: string | null;
+  },
+) {
+  const mode = resolveGuestConversationMode(stayStatus, options?.requestedMode ?? null);
+  return getGuestThreadStateFromStore(stayStatus, mode, options?.threadId ?? null);
+}
+
 export async function getGuestThreadStateFromStore(
   stayStatus: GuestStayStatus,
   mode: ThreadMode,
   threadId?: string | null,
 ) {
-  const fallbackMessages = buildFallbackMessagesForLanguage(mode, stayStatus.selectedLanguage);
+  const resolvedMode = resolveGuestConversationMode(stayStatus, mode);
+  const fallbackMessages = buildFallbackMessagesForLanguage(resolvedMode, stayStatus.selectedLanguage);
 
   if (!hasFirebaseAdminCredentials()) {
     return {
-      threadId: threadId ?? `demo-${mode}`,
+      threadId: threadId ?? `demo-${resolvedMode}`,
+      mode: resolvedMode,
       messages: fallbackMessages,
       meta: {
         handoffStatus: stayStatus.handoffStatus ?? null,
@@ -2249,12 +2281,13 @@ export async function getGuestThreadStateFromStore(
   try {
     const resolvedThreadId =
       threadId ??
-      (await findThread(stayStatus, mode))?.id ??
+      (await findThread(stayStatus, resolvedMode))?.id ??
       null;
 
     if (!resolvedThreadId) {
       return {
         threadId: null,
+        mode: resolvedMode,
         messages: fallbackMessages,
         meta: {
           handoffStatus: stayStatus.handoffStatus ?? null,
@@ -2270,6 +2303,7 @@ export async function getGuestThreadStateFromStore(
 
     return {
       threadId: resolvedThreadId,
+      mode: resolvedMode,
       messages: messages.length > 0 ? messages : fallbackMessages,
       meta: resolveThreadStateMeta(threadData),
     };
@@ -2277,12 +2311,13 @@ export async function getGuestThreadStateFromStore(
     console.error("[guest/thread-state] failed; using fallback thread state", {
       roomId: stayStatus.roomId,
       hotelId: stayStatus.hotelId ?? null,
-      mode,
+      mode: resolvedMode,
       threadId: threadId ?? null,
       error,
     });
     return {
       threadId: threadId ?? null,
+      mode: resolvedMode,
       messages: fallbackMessages,
       meta: {
         handoffStatus: stayStatus.handoffStatus ?? null,

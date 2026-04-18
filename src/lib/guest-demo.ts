@@ -38,6 +38,9 @@ export type GuestRoomContext = {
 
 export type GuestStayStatus = GuestRoomContext & {
   selectedLanguage: GuestLanguage | null;
+  unreadCountFront?: number | null;
+  unreadCountGuest?: number | null;
+  handoffStatus?: "none" | "requested" | "accepted" | null;
 };
 
 export type HearingSheetWifiEntry = {

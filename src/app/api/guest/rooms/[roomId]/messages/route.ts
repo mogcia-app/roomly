@@ -1,12 +1,10 @@
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
-import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import {
   getGuestThreadStateFromStore,
   postGuestAiMessageToStore,
   postGuestAiStarterToStore,
   postGuestMessageToStore,
 } from "@/lib/guest-chat-data";
-import { isGuestLanguage } from "@/lib/guest-demo";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
@@ -49,10 +47,9 @@ export async function GET(
       return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
     }
 
-    const storedLanguage = await getStoredGuestLanguage(access.accessToken);
     const stayStatus = await getGuestActiveStayStatusFromStore(
       access.roomId,
-      storedLanguage,
+      null,
       access.hotelId,
     );
 
@@ -67,6 +64,7 @@ export async function GET(
       mode,
       threadId: threadState.threadId,
       messages: threadState.messages,
+      meta: threadState.meta,
     });
   } catch (error) {
     console.error("[guest/messages:get] failed", { error });
@@ -104,16 +102,12 @@ export async function POST(
       return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
     }
 
-    const storedLanguage = await getStoredGuestLanguage(access.accessToken);
-    const requestedLanguage = isGuestLanguage(payload.guestLanguage)
-      ? payload.guestLanguage
-      : null;
     const protectedTerms = Array.isArray(payload.protectedTerms)
       ? payload.protectedTerms.filter((term): term is string => typeof term === "string" && term.trim().length > 0)
       : undefined;
     const stayStatus = await getGuestActiveStayStatusFromStore(
       access.roomId,
-      storedLanguage ?? requestedLanguage,
+      null,
       access.hotelId,
     );
 

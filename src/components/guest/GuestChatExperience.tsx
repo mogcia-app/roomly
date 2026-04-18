@@ -31,6 +31,9 @@ type GuestChatExperienceProps = {
     roomLabel: string;
     stayId: string | null;
     selectedLanguage: GuestLanguage | null;
+    handoffStatus?: "none" | "requested" | "accepted" | null;
+    unreadCountGuest?: number | null;
+    unreadCountFront?: number | null;
     knowledgeCounts: Record<string, number>;
   } | null;
   roomId: string;
@@ -40,6 +43,12 @@ type GuestChatExperienceProps = {
   knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
   initialMessages: GuestMessage[];
+  initialThreadId: string | null;
+  initialThreadMeta: {
+    handoffStatus: "none" | "requested" | "accepted" | null;
+    unreadCountGuest: number | null;
+    unreadCountFront: number | null;
+  };
   clearThreadQueryOnMount?: boolean;
   languageUpdateNotice?: {
     active: boolean;
@@ -380,6 +389,49 @@ function getLanguageUpdateNotice(
   return updatedMessages > 0
     ? `言語を更新しました。${updatedMessages}件のメッセージを再反映しました。`
     : "言語を更新しました。";
+}
+
+function getHandoffStatusNotice(
+  language: GuestLanguage,
+  handoffStatus: "none" | "requested" | "accepted" | null,
+) {
+  if (handoffStatus === "accepted") {
+    if (language === "en") {
+      return "The front desk has joined this conversation.";
+    }
+
+    if (language === "zh-CN") {
+      return "前台已加入此对话。";
+    }
+
+    if (language === "zh-TW") {
+      return "櫃台已加入此對話。";
+    }
+
+    if (language === "ko") {
+      return "프런트가 이 대화에 참여했습니다.";
+    }
+
+    return "フロントがこの会話に参加しました。";
+  }
+
+  if (language === "en") {
+    return "Your request has been sent to the front desk. Please wait for a reply.";
+  }
+
+  if (language === "zh-CN") {
+    return "您的请求已发送给前台，请稍候回复。";
+  }
+
+  if (language === "zh-TW") {
+    return "您的請求已傳送給櫃台，請稍候回覆。";
+  }
+
+  if (language === "ko") {
+    return "요청이 프런트에 전달되었습니다. 답변을 기다려 주세요.";
+  }
+
+  return "リクエストをフロントへ送信しました。返信をお待ちください。";
 }
 
 function areMessagesEquivalent(left: DisplayMessage[], right: DisplayMessage[]) {
@@ -1994,6 +2046,8 @@ export function GuestChatExperience({
   knowledge,
   prompts,
   initialMessages,
+  initialThreadId,
+  initialThreadMeta,
   clearThreadQueryOnMount = false,
   languageUpdateNotice,
 }: GuestChatExperienceProps) {
@@ -2002,6 +2056,8 @@ export function GuestChatExperience({
   const hasAiGuideContent = hasGuestAiGuideContent(knowledge, prompts);
   const [activeMode, setActiveMode] = useState<"ai" | "human">("human");
   const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(initialThreadId);
+  const [threadMeta, setThreadMeta] = useState(initialThreadMeta);
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const [isQaOpen, setIsQaOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
@@ -2040,7 +2096,9 @@ export function GuestChatExperience({
 
   useEffect(() => {
     setActiveMode("human");
-  }, [roomId]);
+    setCurrentThreadId(initialThreadId);
+    setThreadMeta(initialThreadMeta);
+  }, [initialThreadId, initialThreadMeta, roomId]);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -2082,11 +2140,27 @@ export function GuestChatExperience({
         return;
       }
 
-      const payload = await response.json() as { messages?: GuestMessage[] };
+      const payload = await response.json() as {
+        threadId?: string | null;
+        messages?: GuestMessage[];
+        meta?: {
+          handoffStatus?: "none" | "requested" | "accepted" | null;
+          unreadCountGuest?: number | null;
+          unreadCountFront?: number | null;
+        };
+      };
       const fetchedMessages = (payload.messages ?? []).map((message) => ({
         ...message,
         optimistic: false,
       }));
+      setCurrentThreadId(payload.threadId ?? null);
+      setThreadMeta({
+        handoffStatus: payload.meta?.handoffStatus ?? null,
+        unreadCountGuest:
+          typeof payload.meta?.unreadCountGuest === "number" ? payload.meta.unreadCountGuest : null,
+        unreadCountFront:
+          typeof payload.meta?.unreadCountFront === "number" ? payload.meta.unreadCountFront : null,
+      });
 
       setChatMessages((current) => {
         const optimisticMessages = current.filter((message) => message.optimistic);
@@ -2133,6 +2207,43 @@ export function GuestChatExperience({
     };
   }, []);
 
+  const markThreadReadByGuest = useEffectEvent(async () => {
+    if (!currentThreadId || !threadMeta.unreadCountGuest || threadMeta.unreadCountGuest <= 0) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/guest/rooms/${roomId}/read`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          threadId: currentThreadId,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      setThreadMeta((current) => ({
+        ...current,
+        unreadCountGuest: 0,
+      }));
+    } catch {
+      return;
+    }
+  });
+
+  useEffect(() => {
+    if (document.visibilityState !== "visible") {
+      return;
+    }
+
+    void markThreadReadByGuest();
+  }, [currentThreadId, threadMeta.unreadCountGuest]);
+
   const appendMessages = (newMessages: DisplayMessage[]) => {
     if (newMessages.length === 0) {
       return;
@@ -2177,6 +2288,7 @@ export function GuestChatExperience({
 
       const payload = response.ok
         ? await response.json() as {
+            threadId?: string | null;
             mode?: "ai" | "human";
             messages?: GuestMessage[];
           }
@@ -2187,7 +2299,12 @@ export function GuestChatExperience({
         return;
       }
 
+      setCurrentThreadId(payload?.threadId ?? currentThreadId);
       setActiveMode(payload?.mode ?? activeMode);
+      setThreadMeta((current) => ({
+        ...current,
+        handoffStatus: payload?.mode === "human" ? "requested" : current.handoffStatus,
+      }));
       replaceOptimisticMessage(
         optimisticMessage.id,
         (payload?.messages ?? []).map((message) => ({ ...message, optimistic: false })),
@@ -2196,6 +2313,10 @@ export function GuestChatExperience({
       setIsQuickReplySubmitting(false);
     }
   };
+
+  const handoffStatus = threadMeta.handoffStatus ?? null;
+  const unreadGuestReplies = threadMeta.unreadCountGuest ?? 0;
+  const showHandoffBanner = handoffStatus === "requested" || handoffStatus === "accepted";
 
   return (
     <div
@@ -2248,11 +2369,21 @@ export function GuestChatExperience({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.9 7.5h14.2M2.9 12.5h14.2M10 2.8c1.9 1.9 3 4.5 3 7.2s-1.1 5.3-3 7.2m0-14.4C8.1 4.7 7 7.3 7 10s1.1 5.3 3 7.2" />
               </svg>
             </button>
+            {unreadGuestReplies > 0 ? (
+              <div className="inline-flex min-w-[32px] shrink-0 items-center justify-center rounded-full border border-[#e7b8b1] bg-[#ad2218] px-2 py-1 text-[11px] font-medium text-white">
+                {unreadGuestReplies}
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
 
       <section className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f6efe8_0%,#efe5dc_100%)] px-3 py-4 lg:px-8 lg:py-6">
+        {showHandoffBanner ? (
+          <div className="mb-4 rounded-[18px] border border-[#eadfd8] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
+            {getHandoffStatusNotice(language, handoffStatus)}
+          </div>
+        ) : null}
         {languageUpdateNotice?.active ? (
           <div className="mb-4 rounded-[18px] border border-[#eadfd8] bg-[#fffaf7] px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
             {getLanguageUpdateNotice(language, languageUpdateNotice.updatedMessages)}
@@ -2267,6 +2398,9 @@ export function GuestChatExperience({
             <div>room: {debugInfo.roomId} / {debugInfo.roomLabel}</div>
             <div>stayId: {debugInfo.stayId ?? "(null)"}</div>
             <div>language: {debugInfo.selectedLanguage ?? "(null)"}</div>
+            <div>handoff: {debugInfo.handoffStatus ?? "(null)"}</div>
+            <div>unread guest: {debugInfo.unreadCountGuest ?? "(null)"}</div>
+            <div>unread front: {debugInfo.unreadCountFront ?? "(null)"}</div>
             <div className="mt-1 break-words">
               knowledge: {Object.entries(debugInfo.knowledgeCounts).map(([key, value]) => (
                 `${key}=${value}`
@@ -2277,7 +2411,7 @@ export function GuestChatExperience({
         {!hasGuestMessage && !hasNonSystemHistory ? (
           <HumanStarter
             language={language}
-            directContactOnly={!hasAiGuideContent}
+            directContactOnly={!hasAiGuideContent || showHandoffBanner}
           />
         ) : null}
         <div className="space-y-3 lg:space-y-2.5">

@@ -1,13 +1,8 @@
-import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { GuestChatExperience } from "@/components/guest/GuestChatExperience";
-import {
-  isGuestLanguage,
-} from "@/lib/guest-demo";
 import { getGuestThreadStateFromStore } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
-import { getGuestLanguageCookieName } from "@/lib/guest-language-cookie";
 import { getGuestRichMenuByHotelId } from "@/lib/guest-rich-menu";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -21,6 +16,12 @@ type GuestChatPageProps = {
     thread?: string;
     updatedMessages?: string;
   }>;
+};
+
+type GuestThreadMeta = {
+  handoffStatus: "none" | "requested" | "accepted" | null;
+  unreadCountGuest: number | null;
+  unreadCountFront: number | null;
 };
 
 function summarizeKnowledgeCounts(
@@ -51,7 +52,6 @@ export default async function GuestChatPage({
   const { roomId: accessToken } = await params;
   const {
     debug,
-    lang,
     languageUpdated,
     thread: threadId,
     updatedMessages,
@@ -74,17 +74,9 @@ export default async function GuestChatPage({
     notFound();
   }
 
-  const cookieStore = await cookies();
-  const storedLanguage = cookieStore.get(getGuestLanguageCookieName(access.accessToken))?.value;
-  const sessionLanguage = isGuestLanguage(lang)
-    ? lang
-    : isGuestLanguage(storedLanguage)
-      ? storedLanguage
-      : null;
-
   const room = await getGuestActiveStayStatusFromStore(
     access.roomId,
-    sessionLanguage,
+    null,
     access.hotelId,
   );
 
@@ -93,12 +85,11 @@ export default async function GuestChatPage({
       roomId: access.roomId,
       source: access.source,
       hotelId: access.hotelId,
-      language: sessionLanguage,
     });
     redirect(`/guest/${access.accessToken}/unavailable${debug === "1" ? "?debug=1" : ""}`);
   }
 
-  const currentLanguage = sessionLanguage ?? room.selectedLanguage ?? "ja";
+  const currentLanguage = room.selectedLanguage ?? "ja";
   const currentMode = "human";
   const debugInfo = debug === "1"
     ? {
@@ -109,6 +100,9 @@ export default async function GuestChatPage({
         roomLabel: room.roomLabel,
         stayId: room.stayId ?? null,
         selectedLanguage: room.selectedLanguage ?? null,
+        handoffStatus: room.handoffStatus ?? null,
+        unreadCountGuest: room.unreadCountGuest ?? null,
+        unreadCountFront: room.unreadCountFront ?? null,
         knowledgeCounts: summarizeKnowledgeCounts(room.hearingSheetKnowledge),
       }
     : null;
@@ -129,6 +123,8 @@ export default async function GuestChatPage({
           knowledge={room.hearingSheetKnowledge}
           prompts={room.hearingSheetPrompts}
           initialMessages={threadState.messages}
+          initialThreadId={threadState.threadId}
+          initialThreadMeta={threadState.meta as GuestThreadMeta}
           clearThreadQueryOnMount={Boolean(threadId)}
           languageUpdateNotice={{
             active: languageUpdated === "1",

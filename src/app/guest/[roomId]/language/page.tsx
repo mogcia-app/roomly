@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { GuestLanguageForm } from "@/components/guest/GuestLanguageForm";
 import { GuestShell } from "@/components/guest/GuestShell";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
-import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import { GUEST_LANGUAGE_OPTIONS } from "@/lib/guest-languages";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -36,10 +35,9 @@ export default async function GuestLanguagePage({
     notFound();
   }
 
-  const storedLanguage = await getStoredGuestLanguage(access.accessToken);
   const room = await getGuestActiveStayStatusFromStore(
     access.roomId,
-    storedLanguage,
+    null,
     access.hotelId,
   );
 

@@ -1,6 +1,5 @@
 import { requestHumanHandoff } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
-import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 export const runtime = "nodejs";
@@ -32,10 +31,9 @@ export async function POST(
       return Response.json({ error: "ROOM_NOT_FOUND" }, { status: 404 });
     }
 
-    const storedLanguage = await getStoredGuestLanguage(access.accessToken);
     const stayStatus = await getGuestActiveStayStatusFromStore(
       access.roomId,
-      storedLanguage,
+      null,
       access.hotelId,
     );
 

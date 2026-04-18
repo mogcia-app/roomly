@@ -38,9 +38,16 @@ type FirestoreChatThread = {
   status?: "new" | "in_progress" | "resolved";
   category?: string | null;
   event_type?: "chat_handoff_requested";
+  handoff_status?: "none" | "requested" | "accepted" | null;
+  handoffStatus?: "none" | "requested" | "accepted" | null;
+  handoff_requested_at?: unknown;
+  handoffRequestedAt?: unknown;
+  handoff_accepted_at?: unknown;
+  handoffAcceptedAt?: unknown;
   rich_menu_action_type?: "ai_message" | null;
   rich_menu_label?: string | null;
   guest_language?: string | null;
+  guestLanguage?: string | null;
   pending_handoff_confirmation?: boolean;
   pending_handoff_body?: string | null;
   pending_handoff_category?: string | null;
@@ -48,6 +55,9 @@ type FirestoreChatThread = {
   last_message_at?: unknown;
   last_message_sender?: "guest" | "ai" | "front" | "system";
   unread_count_front?: unknown;
+  unreadCountFront?: unknown;
+  unread_count_guest?: unknown;
+  unreadCountGuest?: unknown;
   created_at?: unknown;
   updated_at?: unknown;
 };
@@ -109,6 +119,26 @@ type FrontdeskReplyOptions = {
   imageUrl?: string | null;
   imageAlt?: string | null;
   manualTranslations?: ManualTranslations;
+};
+
+type GuestThreadStateMeta = {
+  handoffStatus: GuestStayStatus["handoffStatus"];
+  unreadCountGuest: GuestStayStatus["unreadCountGuest"];
+  unreadCountFront: GuestStayStatus["unreadCountFront"];
+};
+
+type FrontdeskNotificationPayload = {
+  threadId: string;
+  hotelId: string;
+  messageId: string;
+  dispatchKey: string;
+  unreadCountFront: number;
+  lastMessageSender: "guest" | "ai" | "front" | "system" | null;
+  lastMessageBody: string;
+  category: string | null;
+  roomId: string;
+  roomNumber: string | null;
+  roomDisplayName: string | null;
 };
 
 function resolveGuestLanguage(language: GuestLanguage | null | undefined) {
@@ -499,6 +529,68 @@ async function addMessage(
   return messageRef.id;
 }
 
+async function buildFrontdeskNotificationPayload(params: {
+  hotelId: string | null | undefined;
+  threadId: string;
+  messageId: string;
+}): Promise<FrontdeskNotificationPayload | null> {
+  const threadSnapshot = await getAdminDb().collection("chat_threads").doc(params.threadId).get();
+
+  if (!threadSnapshot.exists) {
+    console.error("[frontdesk-push] thread missing after update", {
+      threadId: params.threadId,
+      messageId: params.messageId,
+    });
+    return null;
+  }
+
+  const thread = threadSnapshot.data() as FirestoreChatThread | undefined;
+  const hotelId = (thread?.hotel_id ?? params.hotelId ?? "").trim();
+
+  if (!hotelId) {
+    console.error("[frontdesk-push] missing hotelId", {
+      hotelId: params.hotelId ?? null,
+      threadHotelId: thread?.hotel_id ?? null,
+      threadId: params.threadId,
+      messageId: params.messageId,
+    });
+    return null;
+  }
+
+  const unreadCountFront =
+    typeof thread?.unread_count_front === "number"
+      ? thread.unread_count_front
+      : typeof thread?.unreadCountFront === "number"
+        ? thread.unreadCountFront
+        : 0;
+  const lastMessageSender = thread?.last_message_sender ?? null;
+  const lastMessageBody = thread?.last_message_body?.trim() ?? "";
+  const roomId = (thread?.room_id ?? thread?.roomId ?? "").trim();
+
+  if (!roomId) {
+    console.error("[frontdesk-push] missing roomId", {
+      hotelId,
+      threadId: params.threadId,
+      messageId: params.messageId,
+    });
+    return null;
+  }
+
+  return {
+    threadId: params.threadId,
+    hotelId,
+    messageId: params.messageId,
+    dispatchKey: `${params.threadId}:${params.messageId}`,
+    unreadCountFront,
+    lastMessageSender,
+    lastMessageBody,
+    category: thread?.category ?? null,
+    roomId,
+    roomNumber: thread?.room_number ?? thread?.roomNumber ?? null,
+    roomDisplayName: thread?.room_display_name ?? thread?.roomDisplayName ?? null,
+  };
+}
+
 async function notifyFrontdeskGuestMessage(params: {
   hotelId: string | null | undefined;
   threadId: string;
@@ -506,20 +598,9 @@ async function notifyFrontdeskGuestMessage(params: {
 }) {
   const baseUrl = process.env.ROOMLY_CONSOLE_BASE_URL?.trim();
   const token = process.env.FRONTDESK_API_BEARER_TOKEN?.trim();
-  const hotelId = params.hotelId?.trim();
-
-  if (!hotelId) {
-    console.error("[frontdesk-push] missing hotelId", {
-      hotelId: params.hotelId ?? null,
-      threadId: params.threadId,
-      messageId: params.messageId,
-    });
-    return;
-  }
 
   if (!baseUrl || !token) {
     console.error("[frontdesk-push] config missing", {
-      hotelId,
       threadId: params.threadId,
       messageId: params.messageId,
       hasBaseUrl: Boolean(baseUrl),
@@ -529,32 +610,33 @@ async function notifyFrontdeskGuestMessage(params: {
   }
 
   try {
+    const payload = await buildFrontdeskNotificationPayload(params);
+
+    if (!payload) {
+      return;
+    }
+
     const response = await fetch(`${baseUrl}/api/public/frontdesk/push-notifications`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        hotelId,
-        threadId: params.threadId,
-        messageId: params.messageId,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       console.error("[frontdesk-push] request failed", {
-        hotelId,
-        threadId: params.threadId,
-        messageId: params.messageId,
+        hotelId: payload.hotelId,
+        threadId: payload.threadId,
+        messageId: payload.messageId,
         status: response.status,
         error: body,
       });
     }
   } catch (error) {
     console.error("[frontdesk-push] request error", {
-      hotelId,
       threadId: params.threadId,
       messageId: params.messageId,
       error,
@@ -566,7 +648,11 @@ function resolveThreadGuestLanguage(
   thread: FirestoreChatThread | null | undefined,
   stayStatus: GuestStayStatus,
 ) {
-  const threadLanguage = thread?.guest_language;
+  if (stayStatus.selectedLanguage) {
+    return stayStatus.selectedLanguage;
+  }
+
+  const threadLanguage = thread?.guest_language ?? thread?.guestLanguage;
 
   if (
     threadLanguage === "ja" ||
@@ -579,6 +665,41 @@ function resolveThreadGuestLanguage(
   }
 
   return stayStatus.selectedLanguage ?? "ja";
+}
+
+function resolveThreadStateMeta(
+  thread: FirestoreChatThread | null | undefined,
+): GuestThreadStateMeta {
+  const handoffStatus =
+    thread?.handoff_status === "none" ||
+    thread?.handoff_status === "requested" ||
+    thread?.handoff_status === "accepted"
+      ? thread.handoff_status
+      : thread?.handoffStatus === "none" ||
+          thread?.handoffStatus === "requested" ||
+          thread?.handoffStatus === "accepted"
+        ? thread.handoffStatus
+        : thread?.event_type === "chat_handoff_requested"
+          ? "requested"
+          : null;
+  const unreadCountFront =
+    typeof thread?.unread_count_front === "number"
+      ? thread.unread_count_front
+      : typeof thread?.unreadCountFront === "number"
+        ? thread.unreadCountFront
+        : null;
+  const unreadCountGuest =
+    typeof thread?.unread_count_guest === "number"
+      ? thread.unread_count_guest
+      : typeof thread?.unreadCountGuest === "number"
+        ? thread.unreadCountGuest
+        : null;
+
+  return {
+    handoffStatus,
+    unreadCountFront,
+    unreadCountGuest,
+  };
 }
 
 async function findThread(
@@ -663,8 +784,10 @@ async function createThread(
     mode,
     status: mode === "human" ? "new" : "resolved",
     guest_language: stayStatus.selectedLanguage,
+    handoff_status: mode === "human" ? "requested" : "none",
     last_message_body: "",
     unread_count_front: 0,
+    unread_count_guest: 0,
     created_at: FieldValue.serverTimestamp(),
     updated_at: FieldValue.serverTimestamp(),
   } satisfies FirestoreChatThread & { created_at: unknown });
@@ -692,6 +815,11 @@ async function updateHumanThreadMetadata(
   lastMessageSender: "guest" | "ai" | "front" | "system",
   category?: string,
   status?: "new" | "in_progress",
+  options?: {
+    handoffStatus?: "none" | "requested" | "accepted" | null;
+    unreadCountFrontDelta?: number;
+    unreadCountGuestDelta?: number;
+  },
 ) {
   const roomDisplayName = resolveRoomDisplayName({
     room_id: stayStatus.roomId,
@@ -713,16 +841,25 @@ async function updateHumanThreadMetadata(
       status: status ?? "new",
       category: category ?? null,
       event_type: "chat_handoff_requested" as const,
+      handoff_status: options?.handoffStatus ?? "requested",
+      handoff_requested_at:
+        options?.handoffStatus === "requested" ? FieldValue.serverTimestamp() : null,
+      handoff_accepted_at:
+        options?.handoffStatus === "accepted" ? FieldValue.serverTimestamp() : null,
       guest_language: stayStatus.selectedLanguage,
       last_message_body: lastMessageBody,
       last_message_at: FieldValue.serverTimestamp(),
       last_message_sender: lastMessageSender,
-      unread_count_front: FieldValue.increment(1),
+      unread_count_front: FieldValue.increment(options?.unreadCountFrontDelta ?? 1),
+      unread_count_guest: FieldValue.increment(options?.unreadCountGuestDelta ?? 0),
       updated_at: FieldValue.serverTimestamp(),
       created_at: FieldValue.serverTimestamp(),
     } satisfies FirestoreChatThread & {
       last_message_at: unknown;
       unread_count_front: unknown;
+      unread_count_guest: unknown;
+      handoff_requested_at: unknown;
+      handoff_accepted_at: unknown;
       updated_at: unknown;
       created_at: unknown;
     },
@@ -767,6 +904,7 @@ async function updateAiThreadMetadata(
       rich_menu_action_type: options?.richMenuActionType ?? null,
       rich_menu_label: options?.richMenuLabel ?? null,
       guest_language: stayStatus.selectedLanguage,
+      handoff_status: "none" as const,
       pending_handoff_confirmation: options?.pendingHandoffConfirmation ?? false,
       pending_handoff_body: options?.pendingHandoffBody ?? null,
       pending_handoff_category: options?.pendingHandoffCategory ?? null,
@@ -788,6 +926,9 @@ async function updateFrontThreadMetadata(
   threadId: string,
   stayStatus: GuestStayStatus,
   lastMessageBody: string,
+  options?: {
+    handoffStatus?: "none" | "requested" | "accepted" | null;
+  },
 ) {
   const roomDisplayName = resolveRoomDisplayName({
     room_id: stayStatus.roomId,
@@ -806,10 +947,15 @@ async function updateFrontThreadMetadata(
       room_display_name: roomDisplayName,
       room_number: roomNumber,
       hotel_id: stayStatus.hotelId ?? null,
+      status: options?.handoffStatus === "accepted" ? "in_progress" : undefined,
       guest_language: stayStatus.selectedLanguage,
+      handoff_status: options?.handoffStatus ?? null,
+      handoff_accepted_at:
+        options?.handoffStatus === "accepted" ? FieldValue.serverTimestamp() : null,
       last_message_body: lastMessageBody,
       last_message_at: FieldValue.serverTimestamp(),
       last_message_sender: "front" as const,
+      unread_count_guest: FieldValue.increment(1),
       updated_at: FieldValue.serverTimestamp(),
       created_at: FieldValue.serverTimestamp(),
     } satisfies Pick<
@@ -819,13 +965,18 @@ async function updateFrontThreadMetadata(
       | "room_display_name"
       | "room_number"
       | "hotel_id"
+      | "status"
       | "guest_language"
+      | "handoff_status"
       | "last_message_body"
       | "last_message_sender"
+      | "unread_count_guest"
       | "updated_at"
       | "created_at"
     > & {
       last_message_at: unknown;
+      handoff_accepted_at: unknown;
+      unread_count_guest: unknown;
       updated_at: unknown;
       created_at: unknown;
     },
@@ -853,6 +1004,30 @@ function buildThreadStayStatus(
     thread?.guest_language === "ko"
       ? thread.guest_language
       : "ja";
+  const handoffStatus =
+    thread?.handoff_status === "none" ||
+    thread?.handoff_status === "requested" ||
+    thread?.handoff_status === "accepted"
+      ? thread.handoff_status
+      : thread?.handoffStatus === "none" ||
+          thread?.handoffStatus === "requested" ||
+          thread?.handoffStatus === "accepted"
+        ? thread.handoffStatus
+        : thread?.event_type === "chat_handoff_requested"
+          ? "requested"
+          : "none";
+  const unreadCountFront =
+    typeof thread?.unread_count_front === "number"
+      ? thread.unread_count_front
+      : typeof thread?.unreadCountFront === "number"
+        ? thread.unreadCountFront
+        : null;
+  const unreadCountGuest =
+    typeof thread?.unread_count_guest === "number"
+      ? thread.unread_count_guest
+      : typeof thread?.unreadCountGuest === "number"
+        ? thread.unreadCountGuest
+        : null;
 
   return {
     roomId,
@@ -867,6 +1042,9 @@ function buildThreadStayStatus(
     hotelId: thread?.hotel_id ?? null,
     stayId: thread?.stay_id ?? thread?.stayId ?? roomId,
     selectedLanguage: guestLanguage,
+    handoffStatus,
+    unreadCountFront,
+    unreadCountGuest,
   };
 }
 
@@ -904,6 +1082,9 @@ async function handoffGuestReplyFromAiMessage(
     "guest",
     category ?? undefined,
     existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
+    {
+      handoffStatus: "requested",
+    },
   );
   await notifyFrontdeskGuestMessage({
     hotelId: stayStatus.hotelId,
@@ -953,6 +1134,9 @@ async function mirrorAiMessageToHumanThread(
     "ai",
     options?.category ?? existingHumanThreadData?.category ?? undefined,
     options?.status ?? (existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new"),
+    {
+      handoffStatus: "requested",
+    },
   );
 
   return threadId;
@@ -2093,6 +2277,11 @@ export async function getGuestThreadStateFromStore(
     return {
       threadId: threadId ?? `demo-${mode}`,
       messages: fallbackMessages,
+      meta: {
+        handoffStatus: stayStatus.handoffStatus ?? null,
+        unreadCountFront: stayStatus.unreadCountFront ?? null,
+        unreadCountGuest: stayStatus.unreadCountGuest ?? null,
+      },
     };
   }
 
@@ -2106,14 +2295,22 @@ export async function getGuestThreadStateFromStore(
       return {
         threadId: null,
         messages: fallbackMessages,
+        meta: {
+          handoffStatus: stayStatus.handoffStatus ?? null,
+          unreadCountFront: stayStatus.unreadCountFront ?? null,
+          unreadCountGuest: stayStatus.unreadCountGuest ?? null,
+        },
       };
     }
 
+    const threadSnapshot = await getAdminDb().collection("chat_threads").doc(resolvedThreadId).get();
+    const threadData = threadSnapshot.data() as FirestoreChatThread | undefined;
     const messages = await getMessagesByThreadId(resolvedThreadId);
 
     return {
       threadId: resolvedThreadId,
       messages: messages.length > 0 ? messages : fallbackMessages,
+      meta: resolveThreadStateMeta(threadData),
     };
   } catch (error) {
     console.error("[guest/thread-state] failed; using fallback thread state", {
@@ -2126,6 +2323,11 @@ export async function getGuestThreadStateFromStore(
     return {
       threadId: threadId ?? null,
       messages: fallbackMessages,
+      meta: {
+        handoffStatus: stayStatus.handoffStatus ?? null,
+        unreadCountFront: stayStatus.unreadCountFront ?? null,
+        unreadCountGuest: stayStatus.unreadCountGuest ?? null,
+      },
     };
   }
 }
@@ -2173,9 +2375,77 @@ export async function markGuestThreadMessagesRead(
     return true;
   });
 
-  if (docsToUpdate.length === 0) {
+  const batch = db.batch();
+
+  for (const docSnapshot of docsToUpdate) {
+    batch.set(
+      docSnapshot.ref,
+      {
+        read_at_guest: FieldValue.serverTimestamp(),
+      } as { read_at_guest: unknown },
+      { merge: true },
+    );
+  }
+
+  batch.set(
+    db.collection("chat_threads").doc(threadId),
+    {
+      unread_count_front: 0,
+      updated_at: FieldValue.serverTimestamp(),
+    } satisfies Pick<FirestoreChatThread, "unread_count_front" | "updated_at"> & {
+      updated_at: unknown;
+    },
+    { merge: true },
+  );
+
+  await batch.commit();
+
+  return {
+    ok: true as const,
+    updatedCount: docsToUpdate.length,
+  };
+}
+
+export async function markThreadMessagesReadByGuest(
+  threadId: string,
+  messageIds?: string[],
+) {
+  if (!hasFirebaseAdminCredentials()) {
     return { ok: true as const, updatedCount: 0 };
   }
+
+  const db = getAdminDb();
+  const directSnapshot = await db
+    .collection("messages")
+    .where("thread_id", "==", threadId)
+    .get();
+
+  const snapshot = directSnapshot.empty
+    ? await db
+        .collection("messages")
+        .where("threadId", "==", threadId)
+        .get()
+    : directSnapshot;
+
+  const targetIds = messageIds?.length ? new Set(messageIds) : null;
+  const docsToUpdate = snapshot.docs.filter((docSnapshot) => {
+    const data = docSnapshot.data() as FirestoreMessage;
+    const alreadyRead =
+      data.read_at_guest ??
+      data.readAtGuest ??
+      data.seen_at_guest ??
+      data.seenAtGuest;
+
+    if (data.sender === "guest" || alreadyRead) {
+      return false;
+    }
+
+    if (targetIds && !targetIds.has(docSnapshot.id)) {
+      return false;
+    }
+
+    return true;
+  });
 
   const batch = db.batch();
 
@@ -2188,6 +2458,17 @@ export async function markGuestThreadMessagesRead(
       { merge: true },
     );
   }
+
+  batch.set(
+    db.collection("chat_threads").doc(threadId),
+    {
+      unread_count_guest: 0,
+      updated_at: FieldValue.serverTimestamp(),
+    } satisfies Pick<FirestoreChatThread, "unread_count_guest" | "updated_at"> & {
+      updated_at: unknown;
+    },
+    { merge: true },
+  );
 
   await batch.commit();
 
@@ -2257,7 +2538,9 @@ export async function postFrontdeskMessageToStore(
   payload.imageAlt = trimmedImageAlt || null;
 
   const messageId = await addMessage(stayStatus, threadId, "front", payload);
-  await updateFrontThreadMetadata(threadId, stayStatus, sourceBody);
+  await updateFrontThreadMetadata(threadId, stayStatus, sourceBody, {
+    handoffStatus: threadData?.mode === "human" ? "accepted" : null,
+  });
 
   return {
     ok: true as const,
@@ -2332,6 +2615,9 @@ export async function requestHumanHandoff(
         "guest",
         undefined,
         existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
+        {
+          handoffStatus: "requested",
+        },
       );
       await notifyFrontdeskGuestMessage({
         hotelId: stayStatus.hotelId,
@@ -2355,6 +2641,9 @@ export async function requestHumanHandoff(
     "guest",
     category,
     existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
+    {
+      handoffStatus: "requested",
+    },
   );
 
   if (!hasGuestRequest && guestMessageId) {
@@ -2616,6 +2905,9 @@ export async function postGuestMessageToStore(
       "guest",
       options?.category ?? undefined,
       existingThreadData?.status === "in_progress" ? "in_progress" : "new",
+      {
+        handoffStatus: "requested",
+      },
     );
     await notifyFrontdeskGuestMessage({
       hotelId: stayStatus.hotelId,

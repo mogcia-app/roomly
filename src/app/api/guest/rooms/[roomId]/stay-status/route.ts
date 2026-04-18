@@ -1,4 +1,3 @@
-import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -28,10 +27,9 @@ export async function GET(
     );
   }
 
-  const selectedLanguage = await getStoredGuestLanguage(access.accessToken);
   const stayStatus = await getGuestActiveStayStatusFromStore(
     access.roomId,
-    selectedLanguage,
+    null,
     access.hotelId,
   );
 

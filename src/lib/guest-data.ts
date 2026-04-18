@@ -1,5 +1,7 @@
 import "server-only";
 
+import { FieldValue } from "firebase-admin/firestore";
+
 import {
   getAdminDb,
   hasFirebaseAdminCredentials,
@@ -52,6 +54,7 @@ type FirestoreHotel = {
 type FirestoreStay = {
   is_active?: boolean;
   isActive?: boolean;
+  status?: string;
   language?: string;
   guest_language?: string;
   guestLanguage?: string;
@@ -154,8 +157,8 @@ function readBoolean(value: unknown): boolean | null {
 
 function resolveStayLanguage(stay: FirestoreStay | null | undefined) {
   const language =
-    stay?.guestLanguage ??
     stay?.guest_language ??
+    stay?.guestLanguage ??
     stay?.selectedLanguage ??
     stay?.selected_language ??
     stay?.preferredLanguage ??
@@ -873,6 +876,9 @@ export async function getGuestStayStatusFromStore(
       hearingSheetKnowledge: mergedKnowledge,
       roomFloor: toRoomFloor(roomRecord.data) ?? fallbackRoom?.roomFloor ?? null,
       selectedLanguage: stayLanguage ?? selectedLanguage,
+      handoffStatus: null,
+      unreadCountFront: null,
+      unreadCountGuest: null,
     };
   } catch (error) {
     console.error("[guest/data] failed to resolve stay status", {
@@ -906,4 +912,32 @@ export async function getGuestActiveStayStatusFromStore(
   }
 
   return stayStatus;
+}
+
+export async function updateActiveStayLanguageInStore(
+  roomId: string,
+  language: GuestLanguage,
+) {
+  if (!hasFirebaseAdminCredentials()) {
+    return { ok: false as const, stayId: null };
+  }
+
+  const activeStay = await findActiveStayByRoomId(roomId);
+
+  if (!activeStay) {
+    return { ok: false as const, stayId: null };
+  }
+
+  await getAdminDb().collection("stays").doc(activeStay.id).set(
+    {
+      guest_language: language,
+      guestLanguage: language,
+      updated_at: FieldValue.serverTimestamp(),
+    } satisfies Pick<FirestoreStay, "guest_language" | "guestLanguage"> & {
+      updated_at: unknown;
+    },
+    { merge: true },
+  );
+
+  return { ok: true as const, stayId: activeStay.id };
 }

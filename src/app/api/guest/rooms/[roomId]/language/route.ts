@@ -1,12 +1,14 @@
 import {
-  getStoredGuestLanguage,
   setStoredGuestLanguage,
 } from "@/lib/guest-language-cookie";
 import {
   isGuestLanguage,
 } from "@/lib/guest-demo";
 import { updateGuestThreadLanguage } from "@/lib/guest-chat-data";
-import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
+import {
+  getGuestActiveStayStatusFromStore,
+  updateActiveStayLanguageInStore,
+} from "@/lib/guest-data";
 import { syncGuestLanguageToFrontdeskApi } from "@/lib/server/guest-language-api";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -44,10 +46,9 @@ async function handleGuestLanguageUpdate(
     );
   }
 
-  const currentLanguage = await getStoredGuestLanguage(access.accessToken);
   const stayStatus = await getGuestActiveStayStatusFromStore(
     access.roomId,
-    currentLanguage,
+    null,
     access.hotelId,
   );
 
@@ -59,9 +60,10 @@ async function handleGuestLanguageUpdate(
   }
 
   await setStoredGuestLanguage(access.accessToken, body.language);
+  const stayUpdate = await updateActiveStayLanguageInStore(access.roomId, body.language);
   const threadUpdate = await updateGuestThreadLanguage(stayStatus, body.language);
   let syncedThreadId = threadUpdate.threadId;
-  let syncedStayId = stayStatus.stayId ?? null;
+  let syncedStayId = stayUpdate.stayId ?? stayStatus.stayId ?? null;
   let updatedMessages = 0;
 
   if (threadUpdate.threadId) {

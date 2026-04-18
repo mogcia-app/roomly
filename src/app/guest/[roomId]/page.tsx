@@ -2,9 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { GuestShell } from "@/components/guest/GuestShell";
-import { getStoredGuestLanguage } from "@/lib/guest-language-cookie";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
-import { isGuestLanguage, type GuestLanguage } from "@/lib/guest-demo";
+import type { GuestLanguage } from "@/lib/guest-demo";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
 type GuestEntryPageProps = {
@@ -67,7 +66,7 @@ export default async function GuestEntryPage({
   searchParams,
 }: GuestEntryPageProps) {
   const { roomId: accessToken } = await params;
-  const { debug, lang } = await searchParams;
+  const { debug } = await searchParams;
 
   let access;
 
@@ -86,11 +85,9 @@ export default async function GuestEntryPage({
     notFound();
   }
 
-  const storedLanguage = await getStoredGuestLanguage(access.accessToken);
-  const preferredLanguage = isGuestLanguage(lang) ? lang : storedLanguage;
   const stayStatus = await getGuestActiveStayStatusFromStore(
     access.roomId,
-    preferredLanguage,
+    null,
     access.hotelId,
   );
 
@@ -103,7 +100,7 @@ export default async function GuestEntryPage({
     redirect(`/guest/${access.accessToken}/unavailable${debug === "1" ? "?debug=1" : ""}`);
   }
 
-  const currentLanguage = preferredLanguage ?? stayStatus.selectedLanguage ?? "ja";
+  const currentLanguage = stayStatus.selectedLanguage ?? "ja";
   const copy = getEntryCopy(currentLanguage);
   const nextSearchParams = new URLSearchParams();
 

@@ -55,6 +55,13 @@ type FirestoreStay = {
   language?: string;
   guest_language?: string;
   guestLanguage?: string;
+  selected_language?: string;
+  selectedLanguage?: string;
+  preferred_language?: string;
+  preferredLanguage?: string;
+  guest_locale?: string;
+  guestLocale?: string;
+  locale?: string;
   translation_enabled?: boolean;
   translationEnabled?: boolean;
   hotel_id?: string;

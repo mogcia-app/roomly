@@ -1103,45 +1103,6 @@ async function handoffGuestReplyFromAiMessage(
   };
 }
 
-async function mirrorAiMessageToHumanThread(
-  stayStatus: GuestStayStatus,
-  payload: TranslationPayload,
-  lastMessageBody: string,
-  options?: {
-    category?: string | null;
-    status?: "new" | "in_progress";
-    handoffConfirmation?: boolean;
-  },
-) {
-  const threadId = await ensureThread(stayStatus, "human");
-  const existingHumanThread = await getAdminDb().collection("chat_threads").doc(threadId).get();
-  const existingHumanThreadData = existingHumanThread.data() as FirestoreChatThread | undefined;
-
-  await addMessage(
-    stayStatus,
-    threadId,
-    "ai",
-    payload,
-    {
-      handoffConfirmation: options?.handoffConfirmation === true,
-    },
-  );
-
-  await updateHumanThreadMetadata(
-    threadId,
-    stayStatus,
-    payload.translatedBodyFront ?? lastMessageBody,
-    "ai",
-    options?.category ?? existingHumanThreadData?.category ?? undefined,
-    options?.status ?? (existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new"),
-    {
-      handoffStatus: "requested",
-    },
-  );
-
-  return threadId;
-}
-
 export async function ensureGuestHumanThread(stayStatus: GuestStayStatus) {
   if (!hasFirebaseAdminCredentials()) {
     return "demo-human";
@@ -1226,7 +1187,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
   if (language === "en") {
     return {
       handoffRequest: "Please connect me to the front desk.",
-      handoffWaiting: "The front desk has been notified. Please wait for a reply.",
+      handoffWaiting: "The front desk has been notified. Replies will appear on this screen. Please keep this page open and wait here.",
       emergencyWaiting: "Emergency alert sent to the front desk. Please move to a safe place and wait for assistance.",
       handoffConfirmationPrompt: "I can't confirm this with AI alone. Would you like me to forward this message to the front desk?",
       handoffConfirmationDeclined: "Understood. If you need anything else, please send another message.",
@@ -1240,7 +1201,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
   if (language === "zh-CN") {
     return {
       handoffRequest: "请帮我联系前台。",
-      handoffWaiting: "已通知前台，请等待回复。",
+      handoffWaiting: "已通知前台。回复将显示在此画面上。请不要关闭此页面，并在此等候。",
       emergencyWaiting: "已向前台发送紧急通知。请优先确保安全，并在安全地点等待协助。",
       handoffConfirmationPrompt: "这项内容仅靠 AI 无法确认。要我将这条消息转给前台吗？",
       handoffConfirmationDeclined: "好的。如还有其他问题，请继续发送消息。",
@@ -1254,7 +1215,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
   if (language === "zh-TW") {
     return {
       handoffRequest: "請幫我聯繫櫃台。",
-      handoffWaiting: "已通知櫃台，請等待回覆。",
+      handoffWaiting: "已通知櫃台。回覆會顯示在此畫面上。請不要關閉此頁面，並在此等候。",
       emergencyWaiting: "已向櫃台發送緊急通知。請優先確保安全，並在安全地點等待協助。",
       handoffConfirmationPrompt: "這項內容僅靠 AI 無法確認。要我將這則訊息轉給櫃台嗎？",
       handoffConfirmationDeclined: "好的。如果還有其他問題，請再傳送訊息。",
@@ -1268,7 +1229,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
   if (language === "ko") {
     return {
       handoffRequest: "프런트로 연결해 주세요.",
-      handoffWaiting: "프런트에 알렸습니다. 답변을 기다려 주세요.",
+      handoffWaiting: "프런트에 알렸습니다. 답변은 이 화면에 표시됩니다. 화면을 닫지 말고 이 상태로 기다려 주세요.",
       emergencyWaiting: "긴급 상황을 프런트에 전달했습니다. 안전을 먼저 확보하고 안전한 장소에서 도움을 기다려 주세요.",
       handoffConfirmationPrompt: "이 내용은 AI만으로 확인할 수 없습니다. 이 메시지를 프런트로 전달할까요?",
       handoffConfirmationDeclined: "알겠습니다. 다른 문의가 있으면 다시 메시지를 보내 주세요.",
@@ -1281,7 +1242,7 @@ function getLocalizedServerCopy(language: GuestLanguage) {
 
   return {
     handoffRequest: "フロント対応をお願いします。",
-    handoffWaiting: "フロントへ通知しました。返信をお待ちください。",
+    handoffWaiting: "フロントに通知しました。返信はこの画面に表示されます。画面を閉じず、このままお待ちください。",
     emergencyWaiting: "緊急連絡をフロントへ通知しました。安全を確保した場所でお待ちください。",
     handoffConfirmationPrompt: "この内容をフロントへおつなぎしてもいいですか？",
     handoffConfirmationDeclined: "承知しました。ほかにご質問があればそのままお送りください。",
@@ -2858,25 +2819,11 @@ export async function postGuestMessageToStore(
         ? options?.category ?? existingThreadData?.category ?? null
         : null,
     });
-    const humanThreadId = await mirrorAiMessageToHumanThread(
-      stayStatus,
-      aiPayload,
-      aiReply.body,
-      {
-        category: options?.category ?? existingThreadData?.category ?? null,
-        handoffConfirmation: aiReply.needsHandoffConfirmation,
-      },
-    );
     responseMessages.push(
       buildRuntimeMessage("ai", aiPayload, {
         handoffConfirmation: aiReply.needsHandoffConfirmation,
       }),
     );
-    await notifyFrontdeskGuestMessage({
-      hotelId: stayStatus.hotelId,
-      threadId: humanThreadId,
-      messageId: guestMessageId,
-    });
   }
 
   if (mode === "human") {
@@ -2981,15 +2928,6 @@ export async function postGuestAiStarterToStore(
     pendingHandoffBody: aiReply.needsHandoffConfirmation ? aiReply.pendingHandoffBody ?? trimmedBody : null,
     pendingHandoffCategory: null,
   });
-  const humanThreadId = await mirrorAiMessageToHumanThread(stayStatus, aiPayload, aiReply.body, {
-    handoffConfirmation: aiReply.needsHandoffConfirmation,
-  });
-  await notifyFrontdeskGuestMessage({
-    hotelId: stayStatus.hotelId,
-    threadId: humanThreadId,
-    messageId: guestMessageId,
-  });
-
   return {
     ok: true as const,
     threadId,
@@ -3063,15 +3001,6 @@ export async function postGuestAiMessageToStore(
       richMenuLabel: category ?? null,
     },
   );
-  await mirrorAiMessageToHumanThread(
-    stayStatus,
-    aiPayload,
-    trimmedBody || trimmedImageAlt || "AI message",
-    {
-      category: category ?? null,
-    },
-  );
-
   return {
     ok: true as const,
     threadId,

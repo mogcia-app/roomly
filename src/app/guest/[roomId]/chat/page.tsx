@@ -24,6 +24,21 @@ type GuestThreadMeta = {
   unreadCountFront: number | null;
 };
 
+function resolveInitialGuestChatMode(
+  handoffStatus: "none" | "requested" | "accepted" | null | undefined,
+  requestedMode?: string,
+) {
+  if (requestedMode === "human" && (handoffStatus === "requested" || handoffStatus === "accepted")) {
+    return "human" as const;
+  }
+
+  if (requestedMode === "ai") {
+    return "ai" as const;
+  }
+
+  return handoffStatus === "requested" || handoffStatus === "accepted" ? "human" as const : "ai" as const;
+}
+
 function summarizeKnowledgeCounts(
   knowledge: NonNullable<Awaited<ReturnType<typeof getGuestActiveStayStatusFromStore>>>["hearingSheetKnowledge"],
 ) {
@@ -53,6 +68,7 @@ export default async function GuestChatPage({
   const {
     debug,
     languageUpdated,
+    mode,
     thread: threadId,
     updatedMessages,
   } = await searchParams;
@@ -90,7 +106,7 @@ export default async function GuestChatPage({
   }
 
   const currentLanguage = room.selectedLanguage ?? "ja";
-  const currentMode = "human";
+  const currentMode = resolveInitialGuestChatMode(room.handoffStatus, mode);
   const debugInfo = debug === "1"
     ? {
         accessSource: access.source,
@@ -123,6 +139,7 @@ export default async function GuestChatPage({
           knowledge={room.hearingSheetKnowledge}
           prompts={room.hearingSheetPrompts}
           initialMessages={threadState.messages}
+          initialMode={currentMode}
           initialThreadId={threadState.threadId}
           initialThreadMeta={threadState.meta as GuestThreadMeta}
           clearThreadQueryOnMount={Boolean(threadId)}

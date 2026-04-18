@@ -43,6 +43,7 @@ type GuestChatExperienceProps = {
   knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
   initialMessages: GuestMessage[];
+  initialMode: "ai" | "human";
   initialThreadId: string | null;
   initialThreadMeta: {
     handoffStatus: "none" | "requested" | "accepted" | null;
@@ -416,22 +417,22 @@ function getHandoffStatusNotice(
   }
 
   if (language === "en") {
-    return "Your request has been sent to the front desk. Please wait for a reply.";
+    return "The front desk has been notified. Replies will appear on this screen. Please keep this page open and wait here.";
   }
 
   if (language === "zh-CN") {
-    return "您的请求已发送给前台，请稍候回复。";
+    return "已通知前台。回复将显示在此画面上。请不要关闭此页面，并在此等候。";
   }
 
   if (language === "zh-TW") {
-    return "您的請求已傳送給櫃台，請稍候回覆。";
+    return "已通知櫃台。回覆會顯示在此畫面上。請不要關閉此頁面，並在此等候。";
   }
 
   if (language === "ko") {
-    return "요청이 프런트에 전달되었습니다. 답변을 기다려 주세요.";
+    return "프런트에 알렸습니다. 답변은 이 화면에 표시됩니다. 화면을 닫지 말고 이 상태로 기다려 주세요.";
   }
 
-  return "リクエストをフロントへ送信しました。返信をお待ちください。";
+  return "フロントに通知しました。返信はこの画面に表示されます。画面を閉じず、このままお待ちください。";
 }
 
 function areMessagesEquivalent(left: DisplayMessage[], right: DisplayMessage[]) {
@@ -1939,7 +1940,7 @@ function GuestEmergencySheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(80,17,17,0.34)]">
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 z-0"
         role="button"
         aria-label={copy.closeLabel}
         tabIndex={0}
@@ -1950,7 +1951,12 @@ function GuestEmergencySheet({
           }
         }}
       />
-      <div className="relative w-full max-w-md rounded-t-[28px] border border-[#f2d4d1] bg-[#fff7f5] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(108,26,26,0.20)] lg:max-w-none lg:px-8">
+      <div
+        className="relative z-10 w-full max-w-md rounded-t-[28px] border border-[#f2d4d1] bg-[#fff7f5] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(108,26,26,0.20)] lg:max-w-none lg:px-8"
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+      >
         <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#efc7c2]" />
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -1992,6 +1998,7 @@ function GuestEmergencySheet({
             onChange={(event) => setMessage(event.target.value)}
             placeholder={copy.placeholder}
             rows={5}
+            autoFocus
             disabled={isSubmitting}
             className="w-full resize-none rounded-[18px] border border-[#ead6d2] bg-white px-4 py-3 text-sm leading-6 text-[#33231e] outline-none"
           />
@@ -2046,6 +2053,7 @@ export function GuestChatExperience({
   knowledge,
   prompts,
   initialMessages,
+  initialMode,
   initialThreadId,
   initialThreadMeta,
   clearThreadQueryOnMount = false,
@@ -2054,14 +2062,13 @@ export function GuestChatExperience({
   const ui = getGuestUiCopy(language);
   const router = useRouter();
   const hasAiGuideContent = hasGuestAiGuideContent(knowledge, prompts);
-  const [activeMode, setActiveMode] = useState<"ai" | "human">("human");
+  const [activeMode, setActiveMode] = useState<"ai" | "human">(initialMode);
   const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(initialThreadId);
   const [threadMeta, setThreadMeta] = useState(initialThreadMeta);
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const [isQaOpen, setIsQaOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const removeOptimisticMessage = (messageId: string) => {
@@ -2095,31 +2102,10 @@ export function GuestChatExperience({
   }, [visibleMessages]);
 
   useEffect(() => {
-    setActiveMode("human");
+    setActiveMode(initialMode);
     setCurrentThreadId(initialThreadId);
     setThreadMeta(initialThreadMeta);
-  }, [initialThreadId, initialThreadMeta, roomId]);
-
-  useEffect(() => {
-    const visualViewport = window.visualViewport;
-
-    if (!visualViewport) {
-      return;
-    }
-
-    const updateViewportHeight = () => {
-      setViewportHeight(Math.round(visualViewport.height + visualViewport.offsetTop));
-    };
-
-    updateViewportHeight();
-    visualViewport.addEventListener("resize", updateViewportHeight);
-    visualViewport.addEventListener("scroll", updateViewportHeight);
-
-    return () => {
-      visualViewport.removeEventListener("resize", updateViewportHeight);
-      visualViewport.removeEventListener("scroll", updateViewportHeight);
-    };
-  }, []);
+  }, [initialMode, initialThreadId, initialThreadMeta, roomId]);
 
   useEffect(() => {
     if (!clearThreadQueryOnMount) {
@@ -2319,11 +2305,8 @@ export function GuestChatExperience({
   const showHandoffBanner = handoffStatus === "requested" || handoffStatus === "accepted";
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col overflow-hidden"
-      style={viewportHeight ? { height: `${viewportHeight}px` } : undefined}
-    >
-      <header className="border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
+    <div className="flex h-[100dvh] min-h-0 flex-1 flex-col overflow-hidden">
+      <header className="sticky top-0 z-20 border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
         <div className="px-4 py-3 lg:px-8">
           <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
             <div className="min-w-0">

@@ -483,8 +483,29 @@ function buildGuideDetail(
   return null;
 }
 
+function getGuideDetailHint(language: GuestLanguage) {
+  if (language === "en") {
+    return "Tap to view more";
+  }
+
+  if (language === "zh-CN") {
+    return "点按查看详情";
+  }
+
+  if (language === "zh-TW") {
+    return "點按查看詳情";
+  }
+
+  if (language === "ko") {
+    return "눌러서 자세히 보기";
+  }
+
+  return "タップして詳細を見る";
+}
+
 function renderMessageBody(
   message: DisplayMessage,
+  language: GuestLanguage,
   knowledge?: HearingSheetKnowledge | null,
   onGuideDetailOpen?: (detail: GuideDetail) => void,
 ) {
@@ -502,47 +523,57 @@ function renderMessageBody(
       {message.body ? (
         guideCards ? (
           <div className="space-y-3">
-            {guideCards.map((card, index) => (
-              <button
-                key={`${card.title}-${index}`}
-                type="button"
-                onClick={() => {
-                  const detail = buildGuideDetail(card, knowledge);
+            {guideCards.map((card, index) => {
+              const detail = buildGuideDetail(card, knowledge);
 
-                  if (detail && onGuideDetailOpen) {
-                    onGuideDetailOpen(detail);
-                  }
-                }}
-                className={`w-full rounded-[18px] border border-[#eadfd8] bg-[#fcf8f4] p-3 text-left ${
-                  buildGuideDetail(card, knowledge) ? "cursor-pointer" : "cursor-default"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3 border-b border-[#efe4dd] pb-2">
-                  <div>
-                    <div className="text-[14px] font-medium text-[#33231e]">{card.title}</div>
-                    {card.subtitle ? (
-                      <div className="mt-0.5 text-[12px] text-[#8b776e]">{card.subtitle}</div>
+              return (
+                <button
+                  key={`${card.title}-${index}`}
+                  type="button"
+                  onClick={() => {
+                    if (detail && onGuideDetailOpen) {
+                      onGuideDetailOpen(detail);
+                    }
+                  }}
+                  className={`w-full rounded-[18px] border border-[#eadfd8] bg-[#fcf8f4] p-3 text-left ${
+                    detail ? "cursor-pointer transition-colors hover:bg-[#f8f1eb]" : "cursor-default"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3 border-b border-[#efe4dd] pb-2">
+                    <div>
+                      <div className="text-[14px] font-medium text-[#33231e]">{card.title}</div>
+                      {card.subtitle ? (
+                        <div className="mt-0.5 text-[12px] text-[#8b776e]">{card.subtitle}</div>
+                      ) : null}
+                    </div>
+                    {detail ? (
+                      <div className="shrink-0 text-right">
+                        <div className="inline-flex items-center gap-1 rounded-full border border-[#e4d8d1] bg-white px-2.5 py-1 text-[10px] font-light tracking-[0.01em] text-[#8b776e]">
+                          <span>{getGuideDetailHint(language)}</span>
+                          <span aria-hidden="true" className="text-[12px] leading-none text-[#b48a79]">›</span>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {card.fields.map((field) => (
-                    <div
-                      key={`${card.title}-${field.label}`}
-                      className="grid grid-cols-[72px_1fr] gap-3 text-[13px] leading-5"
-                    >
-                      <div className="text-[#8b776e]">{field.label}</div>
-                      <div className="text-[#33231e]">{field.value}</div>
-                    </div>
-                  ))}
-                  {card.notes?.map((note) => (
-                    <div key={`${card.title}-${note}`} className="text-[13px] leading-5 text-[#5f463d]">
-                      {note}
-                    </div>
-                  ))}
-                </div>
-              </button>
-            ))}
+                  <div className="mt-3 space-y-2">
+                    {card.fields.map((field) => (
+                      <div
+                        key={`${card.title}-${field.label}`}
+                        className="grid grid-cols-[72px_1fr] gap-3 text-[13px] leading-5"
+                      >
+                        <div className="text-[#8b776e]">{field.label}</div>
+                        <div className="text-[#33231e]">{field.value}</div>
+                      </div>
+                    ))}
+                    {card.notes?.map((note) => (
+                      <div key={`${card.title}-${note}`} className="text-[13px] leading-5 text-[#5f463d]">
+                        {note}
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="whitespace-pre-line">{formatMessageBody(message.body)}</div>
@@ -2933,7 +2964,7 @@ export function GuestChatExperience({
                   {isGuest ? (
                     <div className="max-w-[86%] lg:max-w-[48%] xl:max-w-[42%]">
                       <div className="rounded-[24px] rounded-br-md bg-[#06c755] px-4 py-3 text-sm leading-6 text-white shadow-[0_14px_28px_rgba(6,199,85,0.18)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                        {renderMessageBody(message, knowledge, setSelectedGuideDetail)}
+                        {renderMessageBody(message, language, knowledge, setSelectedGuideDetail)}
                       </div>
                       <div className="mt-1 flex justify-end text-[11px] text-[#8b776e] lg:text-[10px]">
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
@@ -2945,7 +2976,7 @@ export function GuestChatExperience({
                   ) : isSystem ? (
                     <div className="max-w-[88%] lg:max-w-[52%] xl:max-w-[46%]">
                       <div className="rounded-[24px] bg-white px-4 py-3 text-sm leading-6 text-[#8d4d47] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                        {renderMessageBody(message, knowledge, setSelectedGuideDetail)}
+                        {renderMessageBody(message, language, knowledge, setSelectedGuideDetail)}
                       </div>
                       <div className="mt-1 flex justify-start text-[11px] text-[#8b776e] lg:text-[10px]">
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
@@ -2973,7 +3004,7 @@ export function GuestChatExperience({
                           {senderLabel(message.sender, hotelName)}
                         </div>
                         <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_14px_28px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                          {renderMessageBody(message, knowledge, setSelectedGuideDetail)}
+                          {renderMessageBody(message, language, knowledge, setSelectedGuideDetail)}
                           {message.sender !== "guest" && message.translationState === "fallback" ? (
                             <div className="mt-3 rounded-[14px] border border-[#eadfd8] bg-[#f8f2ee] px-3 py-2 text-[12px] font-light leading-5 text-[#8b776e]">
                               {getTranslationFallbackLabel(language)}

@@ -1718,7 +1718,6 @@ function formatWifiEntry(entry: StructuredKnowledge["wifi"][number]) {
     entry.floor ? `フロア: ${entry.floor}` : null,
     entry.ssid ? `SSID: ${entry.ssid}` : null,
     entry.password ? `PASS: ${entry.password}` : null,
-    entry.note,
   ]);
 }
 
@@ -1729,7 +1728,6 @@ function formatBreakfastEntry(entry: StructuredKnowledge["breakfast"][number]) {
     entry.location ? `場所: ${entry.location}` : null,
     entry.price ? `料金: ${entry.price}` : null,
     formatBoolean(entry.reservationRequired, "予約: 必要", "予約: 不要"),
-    entry.note,
   ]);
 }
 
@@ -1738,7 +1736,6 @@ function formatBathEntry(entry: StructuredKnowledge["baths"][number]) {
     entry.name ?? "大浴場",
     entry.hours ? `営業時間: ${entry.hours}` : null,
     entry.location ? `場所: ${entry.location}` : null,
-    entry.note,
   ]);
 }
 
@@ -1746,7 +1743,6 @@ function formatFacilityEntry(entry: StructuredKnowledge["facilities"][number]) {
   return compactLines([
     entry.name ?? "館内施設",
     entry.hours ? `営業時間: ${entry.hours}` : null,
-    entry.note,
   ]);
 }
 
@@ -1754,7 +1750,6 @@ function formatFacilityLocationEntry(entry: StructuredKnowledge["facilityLocatio
   return compactLines([
     entry.name ?? "施設案内",
     entry.floor ? `場所: ${entry.floor}` : null,
-    entry.note,
   ]);
 }
 
@@ -1767,9 +1762,7 @@ function formatAmenityEntry(entry: StructuredKnowledge["amenities"][number]) {
       "追加対応: 可能",
       "追加対応: 不可",
     ),
-    entry.requestMethod ? `依頼方法: ${entry.requestMethod}` : null,
     entry.price ? `料金: ${entry.price}` : null,
-    entry.note,
   ]);
 }
 
@@ -1781,7 +1774,6 @@ function formatParkingEntry(entry: StructuredKnowledge["parking"][number]) {
     entry.price ? `料金: ${entry.price}` : null,
     entry.hours ? `利用時間: ${entry.hours}` : null,
     formatBoolean(entry.reservationRequired, "予約: 必要", "予約: 不要"),
-    entry.note,
   ]);
 }
 
@@ -1790,7 +1782,6 @@ function formatEmergencyEntry(entry: StructuredKnowledge["emergency"][number]) {
     entry.category ?? "緊急案内",
     entry.contact ? `連絡先: ${entry.contact}` : null,
     entry.steps ? `手順: ${entry.steps}` : null,
-    entry.note,
   ]);
 }
 
@@ -1801,7 +1792,6 @@ function formatCheckoutEntry(entry: StructuredKnowledge["checkout"][number]) {
     entry.method ? `方法: ${entry.method}` : null,
     entry.keyReturnLocation ? `鍵の返却: ${entry.keyReturnLocation}` : null,
     entry.lateCheckoutPolicy ? `レイトチェックアウト: ${entry.lateCheckoutPolicy}` : null,
-    entry.note,
   ]).join(" / ");
 }
 
@@ -1809,9 +1799,7 @@ function formatRoomServiceEntry(entry: StructuredKnowledge["roomService"][number
   return compactLines([
     entry.menuName ?? "ルームサービス",
     entry.price ? `料金: ${entry.price}` : null,
-    entry.orderMethod ? `注文方法: ${entry.orderMethod}` : null,
     entry.hours ? `対応時間: ${entry.hours}` : null,
-    entry.note,
   ]);
 }
 
@@ -1822,7 +1810,6 @@ function formatTransportEntry(entry: StructuredKnowledge["transport"][number]) {
     entry.phone ? `電話: ${entry.phone}` : null,
     entry.hours ? `対応時間: ${entry.hours}` : null,
     entry.priceNote ? `料金: ${entry.priceNote}` : null,
-    entry.note,
   ]);
 }
 
@@ -1833,7 +1820,6 @@ function formatNearbySpotEntry(entry: StructuredKnowledge["nearbySpots"][number]
     entry.distance ? `距離: ${entry.distance}` : null,
     entry.hours ? `営業時間: ${entry.hours}` : null,
     entry.location ? `場所: ${entry.location}` : null,
-    entry.note,
   ]);
 }
 

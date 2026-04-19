@@ -73,10 +73,10 @@ export const GUEST_RICH_MENU_ACTION_SPECS: Record<
   ai_prompt: {
     requiredField: "prompt",
     opensExternalUrl: false,
-    navigationTarget: "chat_ai",
+    navigationTarget: "chat_human",
     composerBehavior: "none",
     description:
-      "Start the AI conversation with the configured prompt as an AI message.",
+      "Show the configured hotel-side guide message and move to human chat.",
   },
   ai_message: {
     requiredField: null,

@@ -1506,13 +1506,21 @@ function GuestChatInput({
     };
   }
 
-  async function postHumanHandoff(category?: string) {
+  async function postHumanHandoff(options?: {
+    category?: string;
+    prompt?: string;
+    translations?: GuestRichMenuItem["translations"];
+  }) {
     const response = await fetch(`/api/guest/rooms/${roomId}/handoff`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(category ? { category } : {}),
+      body: JSON.stringify({
+        category: options?.category,
+        prompt: options?.prompt,
+        translations: options?.translations,
+      }),
     });
 
     const payload = response.ok
@@ -1622,56 +1630,20 @@ function GuestChatInput({
       }
 
       if (action.actionType === "ai_prompt" && action.prompt) {
-        const optimisticMessage =
-          language === "ja"
-            ? createOptimisticMessage("rich-prompt", "ai", action.prompt)
-            : null;
-
-        if (optimisticMessage) {
-          onOptimisticSend(optimisticMessage);
-        }
-
-        const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            body: action.prompt,
-            mode: "ai",
-            kind: "ai_starter",
-            protectedTerms: mergedProtectedTerms,
-            translations: action.translations,
-          }),
-        }).then(async (response) => {
-          const payload = response.ok
-            ? await response.json() as { threadId?: string; messages?: GuestMessage[] }
-            : null;
-
-          return {
-            ok: response.ok,
-            threadId: payload?.threadId ?? null,
-            messages: (payload?.messages ?? []) as GuestMessage[],
-          };
+        const response = await postHumanHandoff({
+          category: action.label,
+          prompt: action.prompt,
+          translations: action.translations,
         });
 
         if (!response.ok) {
-          if (optimisticMessage) {
-            onOptimisticRemove(optimisticMessage.id);
-          }
           setError(ui.messageSendError);
           return;
         }
 
-        onThreadResolved(response.threadId, "ai");
-        if (optimisticMessage) {
-          onMessagesReplace(
-            optimisticMessage.id,
-            response.messages.map((message) => ({ ...message, optimistic: false })),
-          );
-        } else {
-          onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
-        }
+        onModeChange("human");
+        onThreadResolved(response.threadId, response.mode);
+        onMessagesReset(response.messages.map((message) => ({ ...message, optimistic: false })));
         return;
       }
 
@@ -1737,7 +1709,7 @@ function GuestChatInput({
           onOptimisticSend(optimisticMessage);
         }
 
-        const response = await postHumanHandoff(action.handoffCategory);
+        const response = await postHumanHandoff({ category: action.handoffCategory });
 
         if (!response.ok) {
           if (optimisticMessage) {

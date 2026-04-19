@@ -113,7 +113,7 @@ type OpenAiTranslationResponse = {
   translated_text?: string;
 };
 
-type ManualTranslations = Partial<Record<GuestLanguage, string>>;
+export type ManualTranslations = Partial<Record<GuestLanguage, string>>;
 
 type FrontdeskReplyOptions = {
   imageUrl?: string | null;
@@ -2608,7 +2608,12 @@ export async function postFrontdeskMessageToStore(
 
 export async function requestHumanHandoff(
   stayStatus: GuestStayStatus,
-  category?: string,
+  options?: {
+    category?: string;
+    initialPrompt?: string | null;
+    promptTranslations?: ManualTranslations;
+    forceNewThread?: boolean;
+  },
 ) {
   if (!hasFirebaseAdminCredentials()) {
     return {
@@ -2621,12 +2626,18 @@ export async function requestHumanHandoff(
 
   const language = resolveGuestLanguage(stayStatus.selectedLanguage);
   const copy = getLocalizedServerCopy(language);
-  const threadId = await ensureThread(stayStatus, "human");
+  const category = options?.category?.trim() || undefined;
+  const initialPrompt = options?.initialPrompt?.trim() || null;
+  const threadId =
+    options?.forceNewThread === true
+      ? await createThread(stayStatus, "human")
+      : await ensureThread(stayStatus, "human");
   const existingHumanThread = await getAdminDb().collection("chat_threads").doc(threadId).get();
   const existingHumanThreadData = existingHumanThread.data() as FirestoreChatThread | undefined;
   const resolvedGuestLanguage = resolveThreadGuestLanguage(existingHumanThreadData, stayStatus);
   const existingMessages = await getMessagesByThreadId(threadId);
   const isTaxiCategory = Boolean(category && isTaxiHandoffCategory(category));
+  const isPromptOnlyHandoff = Boolean(initialPrompt);
   const guestBody = category ?? copy.handoffRequest;
   const guestPayload = isTaxiCategory
     ? null
@@ -2635,7 +2646,7 @@ export async function requestHumanHandoff(
         guestLanguage: resolvedGuestLanguage,
         frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
       });
-  const hasGuestRequest = isTaxiCategory
+  const hasGuestRequest = isTaxiCategory || isPromptOnlyHandoff
     ? false
     : existingMessages.some(
         (message) =>
@@ -2644,15 +2655,53 @@ export async function requestHumanHandoff(
       );
   let guestMessageId: string | null = null;
 
-  if (!isTaxiCategory && !hasGuestRequest && guestPayload) {
+  if (!isTaxiCategory && !isPromptOnlyHandoff && !hasGuestRequest && guestPayload) {
     guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
   }
 
   const responseMessages: GuestMessage[] = hasGuestRequest
     ? []
-    : !isTaxiCategory && guestPayload
+    : !isTaxiCategory && !isPromptOnlyHandoff && guestPayload
       ? [buildRuntimeMessage("guest", guestPayload)]
       : [];
+
+  if (isPromptOnlyHandoff && initialPrompt) {
+    const promptPayload = await buildTranslationPayload({
+      displayBody: initialPrompt,
+      guestLanguage: resolvedGuestLanguage,
+      originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      displayLanguage: toLanguageCode(resolvedGuestLanguage),
+      frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      manualTranslations: options?.promptTranslations,
+    });
+
+    await addMessage(
+      stayStatus,
+      threadId,
+      "system",
+      promptPayload,
+    );
+
+    await updateHumanThreadMetadata(
+      threadId,
+      stayStatus,
+      initialPrompt,
+      "system",
+      category,
+      "new",
+      {
+        handoffStatus: "requested",
+        unreadCountFrontDelta: 0,
+      },
+    );
+
+    return {
+      ok: true as const,
+      threadId,
+      messages: [buildRuntimeMessage("system", promptPayload)],
+      resolvedMode: "human" as const,
+    };
+  }
 
   if (!category) {
     if (!guestPayload) {

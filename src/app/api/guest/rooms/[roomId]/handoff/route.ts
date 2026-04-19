@@ -1,4 +1,4 @@
-import { requestHumanHandoff } from "@/lib/guest-chat-data";
+import { type ManualTranslations, requestHumanHandoff } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { resolveGuestAccess } from "@/lib/server/room-token";
 
@@ -6,6 +6,8 @@ export const runtime = "nodejs";
 
 type HandoffPayload = {
   category?: string;
+  prompt?: string;
+  translations?: ManualTranslations;
 };
 
 export async function POST(
@@ -41,7 +43,12 @@ export async function POST(
       return Response.json({ error: "ACTIVE_STAY_NOT_FOUND" }, { status: 409 });
     }
 
-    const result = await requestHumanHandoff(stayStatus, payload.category);
+    const result = await requestHumanHandoff(stayStatus, {
+      category: payload.category,
+      initialPrompt: payload.prompt ?? null,
+      promptTranslations: payload.translations,
+      forceNewThread: Boolean(payload.prompt?.trim()),
+    });
 
     return Response.json({
       ok: result.ok,

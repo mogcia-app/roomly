@@ -1796,6 +1796,7 @@ function formatEmergencyEntry(entry: StructuredKnowledge["emergency"][number]) {
 
 function formatCheckoutEntry(entry: StructuredKnowledge["checkout"][number]) {
   return compactParts([
+    "チェックアウト",
     entry.time ? `時間: ${entry.time}` : null,
     entry.method ? `方法: ${entry.method}` : null,
     entry.keyReturnLocation ? `鍵の返却: ${entry.keyReturnLocation}` : null,

@@ -177,6 +177,12 @@ type GuideCard = {
   notes?: string[];
 };
 
+type GuideDetail = {
+  title: string;
+  fields: Array<{ label: string; value: string }>;
+  notes: string[];
+};
+
 const GUIDE_CARD_FIELD_LABELS = new Set([
   "電話",
   "対応時間",
@@ -293,7 +299,182 @@ function parseGuideCards(body: string): GuideCard[] | null {
   return structuredSegmentCount >= 2 && validCards.length > 0 ? validCards : null;
 }
 
-function renderMessageBody(message: DisplayMessage) {
+function normalizeGuideLookupKey(value: string) {
+  return value
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .replace(/[：:]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function buildGuideDetail(
+  card: GuideCard,
+  knowledge?: HearingSheetKnowledge | null,
+): GuideDetail | null {
+  if (!knowledge) {
+    return null;
+  }
+
+  const titleKey = normalizeGuideLookupKey(card.title);
+
+  const facilityLocation = knowledge.facilityLocations.find((entry) =>
+    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+  );
+
+  if (facilityLocation) {
+    return {
+      title: facilityLocation.name ?? card.title,
+      fields: [
+        ...(facilityLocation.floor ? [{ label: "場所", value: facilityLocation.floor }] : []),
+      ],
+      notes: facilityLocation.note ? [facilityLocation.note] : [],
+    };
+  }
+
+  const facility = knowledge.facilities.find((entry) =>
+    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+  );
+
+  if (facility) {
+    return {
+      title: facility.name ?? card.title,
+      fields: [
+        ...(facility.hours ? [{ label: "営業時間", value: facility.hours }] : []),
+      ],
+      notes: facility.note ? [facility.note] : [],
+    };
+  }
+
+  const bath = knowledge.baths.find((entry) =>
+    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+  );
+
+  if (bath) {
+    return {
+      title: bath.name ?? card.title,
+      fields: [
+        ...(bath.location ? [{ label: "場所", value: bath.location }] : []),
+        ...(bath.hours ? [{ label: "営業時間", value: bath.hours }] : []),
+      ],
+      notes: bath.note ? [bath.note] : [],
+    };
+  }
+
+  const amenity = knowledge.amenities.find((entry) =>
+    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+  );
+
+  if (amenity) {
+    return {
+      title: amenity.name ?? card.title,
+      fields: [
+        ...(amenity.inRoom !== null
+          ? [{ label: "客室内", value: amenity.inRoom ? "あり" : "なし" }]
+          : []),
+        ...(amenity.availableOnRequest !== null
+          ? [{ label: "追加対応", value: amenity.availableOnRequest ? "可能" : "不可" }]
+          : []),
+        ...(amenity.requestMethod ? [{ label: "依頼方法", value: amenity.requestMethod }] : []),
+        ...(amenity.price ? [{ label: "料金", value: amenity.price }] : []),
+      ],
+      notes: amenity.note ? [amenity.note] : [],
+    };
+  }
+
+  const parking = knowledge.parking.find((entry) =>
+    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+  );
+
+  if (parking) {
+    return {
+      title: parking.name ?? card.title,
+      fields: [
+        ...(parking.location ? [{ label: "場所", value: parking.location }] : []),
+        ...(parking.capacity ? [{ label: "台数", value: parking.capacity }] : []),
+        ...(parking.price ? [{ label: "料金", value: parking.price }] : []),
+        ...(parking.hours ? [{ label: "利用時間", value: parking.hours }] : []),
+        ...(parking.reservationRequired !== null
+          ? [{ label: "予約", value: parking.reservationRequired ? "必要" : "不要" }]
+          : []),
+      ],
+      notes: parking.note ? [parking.note] : [],
+    };
+  }
+
+  const roomService = knowledge.roomService.find((entry) =>
+    normalizeGuideLookupKey(entry.menuName ?? "") === titleKey,
+  );
+
+  if (roomService) {
+    return {
+      title: roomService.menuName ?? card.title,
+      fields: [
+        ...(roomService.price ? [{ label: "料金", value: roomService.price }] : []),
+        ...(roomService.orderMethod ? [{ label: "注文方法", value: roomService.orderMethod }] : []),
+        ...(roomService.hours ? [{ label: "対応時間", value: roomService.hours }] : []),
+      ],
+      notes: roomService.note ? [roomService.note] : [],
+    };
+  }
+
+  const transport = knowledge.transport.find((entry) =>
+    normalizeGuideLookupKey(entry.companyName ?? "") === titleKey,
+  );
+
+  if (transport) {
+    return {
+      title: transport.companyName ?? card.title,
+      fields: [
+        ...(transport.serviceType ? [{ label: "種別", value: transport.serviceType }] : []),
+        ...(transport.phone ? [{ label: "電話", value: transport.phone }] : []),
+        ...(transport.hours ? [{ label: "対応時間", value: transport.hours }] : []),
+        ...(transport.priceNote ? [{ label: "料金", value: transport.priceNote }] : []),
+      ],
+      notes: transport.note ? [transport.note] : [],
+    };
+  }
+
+  const nearby = knowledge.nearbySpots.find((entry) =>
+    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+  );
+
+  if (nearby) {
+    return {
+      title: nearby.name ?? card.title,
+      fields: [
+        ...(nearby.category ? [{ label: "カテゴリ", value: nearby.category }] : []),
+        ...(nearby.distance ? [{ label: "距離", value: nearby.distance }] : []),
+        ...(nearby.hours ? [{ label: "営業時間", value: nearby.hours }] : []),
+        ...(nearby.location ? [{ label: "場所", value: nearby.location }] : []),
+      ],
+      notes: nearby.note ? [nearby.note] : [],
+    };
+  }
+
+  if (titleKey.includes("チェックアウト") && knowledge.checkout[0]) {
+    const checkout = knowledge.checkout[0];
+
+    return {
+      title: "チェックアウト",
+      fields: [
+        ...(checkout.time ? [{ label: "時間", value: checkout.time }] : []),
+        ...(checkout.method ? [{ label: "方法", value: checkout.method }] : []),
+        ...(checkout.keyReturnLocation ? [{ label: "鍵の返却", value: checkout.keyReturnLocation }] : []),
+        ...(checkout.lateCheckoutPolicy ? [{ label: "レイトチェックアウト", value: checkout.lateCheckoutPolicy }] : []),
+      ],
+      notes: checkout.note ? [checkout.note] : [],
+    };
+  }
+
+  return null;
+}
+
+function renderMessageBody(
+  message: DisplayMessage,
+  knowledge?: HearingSheetKnowledge | null,
+  onGuideDetailOpen?: (detail: GuideDetail) => void,
+) {
   const guideCards = message.body ? parseGuideCards(message.body) : null;
 
   return (
@@ -309,9 +490,19 @@ function renderMessageBody(message: DisplayMessage) {
         guideCards ? (
           <div className="space-y-3">
             {guideCards.map((card, index) => (
-              <div
+              <button
                 key={`${card.title}-${index}`}
-                className="rounded-[18px] border border-[#eadfd8] bg-[#fcf8f4] p-3"
+                type="button"
+                onClick={() => {
+                  const detail = buildGuideDetail(card, knowledge);
+
+                  if (detail && onGuideDetailOpen) {
+                    onGuideDetailOpen(detail);
+                  }
+                }}
+                className={`w-full rounded-[18px] border border-[#eadfd8] bg-[#fcf8f4] p-3 text-left ${
+                  buildGuideDetail(card, knowledge) ? "cursor-pointer" : "cursor-default"
+                }`}
               >
                 <div className="flex items-start justify-between gap-3 border-b border-[#efe4dd] pb-2">
                   <div>
@@ -337,13 +528,74 @@ function renderMessageBody(message: DisplayMessage) {
                     </div>
                   ))}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         ) : (
           <div className="whitespace-pre-line">{formatMessageBody(message.body)}</div>
         )
       ) : null}
+    </div>
+  );
+}
+
+function GuideDetailSheet({
+  detail,
+  onClose,
+}: {
+  detail: GuideDetail | null;
+  onClose: () => void;
+}) {
+  if (!detail) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(35,24,18,0.26)]">
+      <div
+        className="absolute inset-0"
+        role="button"
+        aria-label="Close detail"
+        tabIndex={0}
+        onClick={onClose}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            onClose();
+          }
+        }}
+      />
+      <div className="relative w-full max-w-md rounded-t-[28px] border border-[#eadfd8] bg-[#fffaf7] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(72,47,35,0.18)] lg:max-w-none lg:px-8">
+        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#e2d4cc]" />
+        <div className="flex items-start justify-between gap-4">
+          <div className="text-[18px] font-medium text-[#251815]">{detail.title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#7a6056]"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-4 space-y-3">
+          {detail.fields.map((field) => (
+            <div
+              key={`${detail.title}-${field.label}`}
+              className="grid grid-cols-[88px_1fr] gap-3 rounded-[16px] border border-[#eadfd8] bg-white px-4 py-3 text-[14px] leading-6"
+            >
+              <div className="text-[#8b776e]">{field.label}</div>
+              <div className="text-[#33231e]">{field.value}</div>
+            </div>
+          ))}
+          {detail.notes.map((note) => (
+            <div
+              key={`${detail.title}-${note}`}
+              className="rounded-[16px] border border-[#eadfd8] bg-white px-4 py-3 text-[14px] leading-6 text-[#5f463d] whitespace-pre-line"
+            >
+              {note}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2090,6 +2342,7 @@ export function GuestChatExperience({
   const [threadMeta, setThreadMeta] = useState(initialThreadMeta);
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const [isQaOpen, setIsQaOpen] = useState(false);
+  const [selectedGuideDetail, setSelectedGuideDetail] = useState<GuideDetail | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const activeModeRef = useRef<"ai" | "human">(initialMode);
   const currentThreadIdRef = useRef<string | null>(initialThreadId);
@@ -2466,7 +2719,7 @@ export function GuestChatExperience({
                   {isGuest ? (
                     <div className="max-w-[86%] lg:max-w-[48%] xl:max-w-[42%]">
                       <div className="rounded-[24px] rounded-br-md bg-[#06c755] px-4 py-3 text-sm leading-6 text-white shadow-[0_14px_28px_rgba(6,199,85,0.18)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                        {renderMessageBody(message)}
+                        {renderMessageBody(message, knowledge, setSelectedGuideDetail)}
                       </div>
                       <div className="mt-1 flex justify-end text-[11px] text-[#8b776e] lg:text-[10px]">
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
@@ -2478,7 +2731,7 @@ export function GuestChatExperience({
                   ) : isSystem ? (
                     <div className="max-w-[88%] lg:max-w-[52%] xl:max-w-[46%]">
                       <div className="rounded-[24px] bg-white px-4 py-3 text-sm leading-6 text-[#8d4d47] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                        {renderMessageBody(message)}
+                        {renderMessageBody(message, knowledge, setSelectedGuideDetail)}
                       </div>
                       <div className="mt-1 flex justify-start text-[11px] text-[#8b776e] lg:text-[10px]">
                         <span>{formatTimeLabel(message.timestamp, language)}</span>
@@ -2506,7 +2759,7 @@ export function GuestChatExperience({
                           {senderLabel(message.sender, hotelName)}
                         </div>
                         <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_14px_28px_rgba(72,47,35,0.05)] lg:rounded-[20px] lg:px-3.5 lg:py-2.5 lg:text-[13px] lg:leading-5">
-                          {renderMessageBody(message)}
+                          {renderMessageBody(message, knowledge, setSelectedGuideDetail)}
                           {message.sender !== "guest" && message.translationState === "fallback" ? (
                             <div className="mt-3 rounded-[14px] border border-[#eadfd8] bg-[#f8f2ee] px-3 py-2 text-[12px] font-light leading-5 text-[#8b776e]">
                               {getTranslationFallbackLabel(language)}
@@ -2590,6 +2843,12 @@ export function GuestChatExperience({
           setActiveMode(mode);
         }}
         onMessagesAppend={appendMessages}
+      />
+      <GuideDetailSheet
+        detail={selectedGuideDetail}
+        onClose={() => {
+          setSelectedGuideDetail(null);
+        }}
       />
     </div>
   );

@@ -2626,28 +2626,39 @@ export async function requestHumanHandoff(
   const existingHumanThreadData = existingHumanThread.data() as FirestoreChatThread | undefined;
   const resolvedGuestLanguage = resolveThreadGuestLanguage(existingHumanThreadData, stayStatus);
   const existingMessages = await getMessagesByThreadId(threadId);
+  const isTaxiCategory = Boolean(category && isTaxiHandoffCategory(category));
   const guestBody = category ?? copy.handoffRequest;
-  const guestPayload = await buildTranslationPayload({
-    displayBody: guestBody,
-    guestLanguage: resolvedGuestLanguage,
-    frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
-  });
-  const hasGuestRequest = existingMessages.some(
-    (message) =>
-      message.sender === "guest" &&
-      message.body === guestBody,
-  );
+  const guestPayload = isTaxiCategory
+    ? null
+    : await buildTranslationPayload({
+        displayBody: guestBody,
+        guestLanguage: resolvedGuestLanguage,
+        frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+      });
+  const hasGuestRequest = isTaxiCategory
+    ? false
+    : existingMessages.some(
+        (message) =>
+          message.sender === "guest" &&
+          message.body === guestBody,
+      );
   let guestMessageId: string | null = null;
 
-  if (!hasGuestRequest) {
+  if (!isTaxiCategory && !hasGuestRequest && guestPayload) {
     guestMessageId = await addMessage(stayStatus, threadId, "guest", guestPayload);
   }
 
   const responseMessages: GuestMessage[] = hasGuestRequest
     ? []
-    : [buildRuntimeMessage("guest", guestPayload)];
+    : !isTaxiCategory && guestPayload
+      ? [buildRuntimeMessage("guest", guestPayload)]
+      : [];
 
   if (!category) {
+    if (!guestPayload) {
+      return { ok: false as const, error: "EMPTY_MESSAGE" };
+    }
+
     const waitingPayload = await buildTranslationPayload({
       displayBody: copy.handoffWaiting,
       guestLanguage: resolveThreadGuestLanguage(existingMessages.length > 0 ? existingHumanThreadData : undefined, stayStatus),
@@ -2693,8 +2704,8 @@ export async function requestHumanHandoff(
   await updateHumanThreadMetadata(
     threadId,
     stayStatus,
-    guestPayload.translatedBodyFront ?? guestBody,
-    "guest",
+    isTaxiCategory ? copy.taxiHandoffPrompt : guestPayload?.translatedBodyFront ?? guestBody,
+    isTaxiCategory ? "system" : "guest",
     category,
     existingHumanThreadData?.status === "in_progress" ? "in_progress" : "new",
     {
@@ -2710,7 +2721,7 @@ export async function requestHumanHandoff(
     });
   }
 
-  if (category && isTaxiHandoffCategory(category)) {
+  if (isTaxiCategory) {
     const taxiPromptBody = copy.taxiHandoffPrompt;
     const hasTaxiPrompt = existingMessages.some(
       (message) => message.sender === "system" && message.body === taxiPromptBody,

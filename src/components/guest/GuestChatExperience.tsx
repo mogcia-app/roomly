@@ -42,6 +42,7 @@ type GuestChatExperienceProps = {
   language: GuestLanguage;
   knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
+  localizedGuideLabels?: Record<string, string>;
   initialMessages: GuestMessage[];
   initialMode: "ai" | "human";
   initialThreadId: string | null;
@@ -66,6 +67,7 @@ type GuestChatComposerProps = {
   language: GuestLanguage;
   richMenu: GuestRichMenu | null;
   onModeChange: (mode: "ai" | "human") => void;
+  onThreadResolved: (threadId: string | null, mode: "ai" | "human") => void;
   onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
   onOptimisticRemove: (messageId: string) => void;
@@ -77,6 +79,7 @@ type GuestQaSheetProps = {
   language: GuestLanguage;
   knowledge?: HearingSheetKnowledge | null;
   prompts: string[];
+  localizedGuideLabels?: Record<string, string>;
   open: boolean;
   onClose: () => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
@@ -820,6 +823,76 @@ function localizeSupplementalPrompt(language: GuestLanguage, prompt: string) {
     return prompt;
   }
 
+  const normalized = normalizeGuideText(prompt);
+
+  const sentenceTranslations: Array<{
+    match: (value: string) => boolean;
+    values: Record<Exclude<GuestLanguage, "ja">, string>;
+  }> = [
+    {
+      match: (value) =>
+        value.includes("チェックイン前に荷物を預けられますか") ||
+        (value.includes("荷物") && value.includes("預")),
+      values: {
+        en: "Can I leave my luggage before check-in?",
+        ko: "체크인 전에 짐을 맡길 수 있나요?",
+        "zh-CN": "入住前可以寄存行李吗？",
+        "zh-TW": "入住前可以寄放行李嗎？",
+      },
+    },
+    {
+      match: (value) => value.includes("ランドリー") || value.includes("コインランドリー"),
+      values: {
+        en: "Is there a laundry room?",
+        ko: "세탁실이 있나요?",
+        "zh-CN": "有洗衣房吗？",
+        "zh-TW": "有洗衣房嗎？",
+      },
+    },
+    {
+      match: (value) => value.includes("加湿器"),
+      values: {
+        en: "Can I borrow a humidifier?",
+        ko: "가습기를 빌릴 수 있나요?",
+        "zh-CN": "可以借加湿器吗？",
+        "zh-TW": "可以借加濕器嗎？",
+      },
+    },
+    {
+      match: (value) => value.includes("門限"),
+      values: {
+        en: "Is there a curfew?",
+        ko: "통금 시간이 있나요?",
+        "zh-CN": "有门禁时间吗？",
+        "zh-TW": "有門禁時間嗎？",
+      },
+    },
+    {
+      match: (value) => value.includes("近くにコンビニ"),
+      values: {
+        en: "Is there a convenience store nearby?",
+        ko: "근처에 편의점이 있나요?",
+        "zh-CN": "附近有便利店吗？",
+        "zh-TW": "附近有便利商店嗎？",
+      },
+    },
+    {
+      match: (value) => value.includes("キャンセル") && value.includes("いつまで"),
+      values: {
+        en: "Until when can I cancel?",
+        ko: "취소는 언제까지 가능한가요?",
+        "zh-CN": "最晚可以在什么时候取消？",
+        "zh-TW": "最晚可以在什麼時候取消？",
+      },
+    },
+  ];
+
+  const matchedSentence = sentenceTranslations.find((entry) => entry.match(normalized));
+
+  if (matchedSentence) {
+    return matchedSentence.values[language];
+  }
+
   const separatorIndex = prompt.indexOf(":");
 
   if (separatorIndex < 0) {
@@ -936,11 +1009,20 @@ function inferGuidePromptKey(prompt: string): AiGuideOption["key"] | null {
     return "transport";
   }
 
-  if (normalized.includes("周辺") || normalized.includes("nearby")) {
+  if (
+    normalized.includes("周辺") ||
+    normalized.includes("nearby") ||
+    normalized.includes("コンビニ")
+  ) {
     return "nearby";
   }
 
-  if (normalized.includes("フロント") || normalized.includes("frontdesk")) {
+  if (
+    normalized.includes("フロント") ||
+    normalized.includes("frontdesk") ||
+    normalized.includes("荷物") ||
+    normalized.includes("預")
+  ) {
     return "frontDesk";
   }
 
@@ -1075,12 +1157,23 @@ function buildAiGuideOptions(
   language: GuestLanguage,
   knowledge: HearingSheetKnowledge | null | undefined,
   prompts: string[],
+  localizedGuideLabels?: Record<string, string>,
 ) {
   const options: AiGuideOption[] = [];
   const coveredPromptPrefixes = new Set<string>();
+  const seenLabels = new Set<string>();
+
+  const pushOption = (option: AiGuideOption) => {
+    if (seenLabels.has(option.label)) {
+      return;
+    }
+
+    options.push(option);
+    seenLabels.add(option.label);
+  };
 
   if (knowledge?.wifi.length) {
-    options.push({
+    pushOption({
       key: "wifi",
       label: getAiGuideLabel(language, "wifi"),
       prompt: getLocalizedGuidePrompt("ja", "wifi"),
@@ -1090,7 +1183,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.breakfast.length) {
-    options.push({
+    pushOption({
       key: "breakfast",
       label: getAiGuideLabel(language, "breakfast"),
       prompt: getLocalizedGuidePrompt("ja", "breakfast"),
@@ -1100,7 +1193,7 @@ function buildAiGuideOptions(
 
   if (knowledge?.baths.length) {
     const bathName = knowledge.baths[0]?.name ?? "大浴場";
-    options.push({
+    pushOption({
       key: "bath",
       label: getAiGuideLabel(language, "bath"),
       prompt: getLocalizedGuidePrompt("ja", "bath", bathName),
@@ -1110,7 +1203,7 @@ function buildAiGuideOptions(
   }
 
   if ((knowledge?.facilities.length ?? 0) > 0 || (knowledge?.facilityLocations.length ?? 0) > 0) {
-    options.push({
+    pushOption({
       key: "facility",
       label: getAiGuideLabel(language, "facility"),
       prompt: getLocalizedGuidePrompt("ja", "facility"),
@@ -1119,7 +1212,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.amenities.length) {
-    options.push({
+    pushOption({
       key: "amenity",
       label: getAiGuideLabel(language, "amenity"),
       prompt: getLocalizedGuidePrompt("ja", "amenity"),
@@ -1128,7 +1221,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.parking.length) {
-    options.push({
+    pushOption({
       key: "parking",
       label: getAiGuideLabel(language, "parking"),
       prompt: getLocalizedGuidePrompt("ja", "parking"),
@@ -1137,7 +1230,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.checkout.length) {
-    options.push({
+    pushOption({
       key: "checkout",
       label: getAiGuideLabel(language, "checkout"),
       prompt: getLocalizedGuidePrompt("ja", "checkout"),
@@ -1146,7 +1239,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.emergency.length) {
-    options.push({
+    pushOption({
       key: "emergency",
       label: getAiGuideLabel(language, "emergency"),
       prompt: getLocalizedGuidePrompt("ja", "emergency"),
@@ -1154,7 +1247,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.roomService.length) {
-    options.push({
+    pushOption({
       key: "roomService",
       label: getAiGuideLabel(language, "roomService"),
       prompt: getLocalizedGuidePrompt("ja", "roomService"),
@@ -1162,7 +1255,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.transport.length) {
-    options.push({
+    pushOption({
       key: "transport",
       label: getAiGuideLabel(language, "transport"),
       prompt: getLocalizedGuidePrompt("ja", "transport"),
@@ -1172,7 +1265,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.nearbySpots.length) {
-    options.push({
+    pushOption({
       key: "nearby",
       label: getAiGuideLabel(language, "nearby"),
       prompt: getLocalizedGuidePrompt("ja", "nearby"),
@@ -1182,7 +1275,7 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.frontDeskHours.length) {
-    options.push({
+    pushOption({
       key: "frontDesk",
       label: getAiGuideLabel(language, "frontDesk"),
       prompt: getLocalizedGuidePrompt("ja", "frontDesk"),
@@ -1192,26 +1285,23 @@ function buildAiGuideOptions(
   }
 
   if (knowledge?.faq.length) {
-    options.push(
-      ...knowledge.faq
-        .map((entry) => entry.question?.trim() ?? "")
-        .filter((question) => question.length > 0)
-        .filter((question) => {
-          const inferredKey = inferGuidePromptKey(question);
-          return !inferredKey || !options.some((option) => option.key === inferredKey);
-        })
-        .map((question) => {
-          const inferredKey = inferGuidePromptKey(question);
+    for (const question of knowledge.faq
+      .map((entry) => entry.question?.trim() ?? "")
+      .filter((value) => value.length > 0)) {
+      const inferredKey = inferGuidePromptKey(question);
 
-          return {
-            key: `faq:${question}`,
-            label: inferredKey
-              ? getLocalizedGuidePrompt(language, inferredKey)
-              : localizeSupplementalPrompt(language, question),
-            prompt: question,
-          };
-        }),
-    );
+      if (inferredKey && options.some((option) => option.key === inferredKey)) {
+        continue;
+      }
+
+      pushOption({
+        key: `faq:${question}`,
+        label: inferredKey
+          ? getLocalizedGuidePrompt(language, inferredKey)
+          : localizedGuideLabels?.[question] ?? localizeSupplementalPrompt(language, question),
+        prompt: question,
+      });
+    }
   }
 
   const existingPrompts = new Set(options.map((option) => option.prompt));
@@ -1233,9 +1323,10 @@ function buildAiGuideOptions(
       })
       .map((prompt) => ({
         key: `prompt:${prompt}`,
-        label: localizeSupplementalPrompt(language, prompt),
+        label: localizedGuideLabels?.[prompt] ?? localizeSupplementalPrompt(language, prompt),
         prompt,
-      })),
+      }))
+      .filter((option) => !seenLabels.has(option.label)),
   ];
 }
 
@@ -1244,6 +1335,7 @@ function GuestChatInput({
   language,
   richMenu,
   onModeChange,
+  onThreadResolved,
   onMessagesReplace,
   onMessagesAppend,
   onOptimisticRemove,
@@ -1257,6 +1349,7 @@ function GuestChatInput({
   const submitLockRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const [isPending, startTransition] = useTransition();
   const isBusy = isPending || isSubmitting;
 
@@ -1280,6 +1373,34 @@ function GuestChatInput({
 
     return () => {
       textarea.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) {
+      return;
+    }
+
+    const viewport = window.visualViewport;
+
+    const updateKeyboardInset = () => {
+      const nextInset = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop,
+      );
+      setKeyboardInset(nextInset);
+    };
+
+    updateKeyboardInset();
+
+    viewport.addEventListener("resize", updateKeyboardInset);
+    viewport.addEventListener("scroll", updateKeyboardInset);
+    window.addEventListener("orientationchange", updateKeyboardInset);
+
+    return () => {
+      viewport.removeEventListener("resize", updateKeyboardInset);
+      viewport.removeEventListener("scroll", updateKeyboardInset);
+      window.removeEventListener("orientationchange", updateKeyboardInset);
     };
   }, []);
 
@@ -1406,6 +1527,7 @@ function GuestChatInput({
       }
 
       onModeChange("human");
+      onThreadResolved(response.threadId, response.mode);
       onMessagesReplace(
         optimisticMessage.id,
         response.messages.map((message) => ({ ...message, optimistic: false })),
@@ -1503,6 +1625,7 @@ function GuestChatInput({
           return;
         }
 
+        onThreadResolved(response.threadId, "ai");
         if (optimisticMessage) {
           onMessagesReplace(
             optimisticMessage.id,
@@ -1547,6 +1670,7 @@ function GuestChatInput({
           return;
         }
 
+        onThreadResolved(response.threadId, "ai");
         if (optimisticMessage) {
           onMessagesReplace(
             optimisticMessage.id,
@@ -1578,6 +1702,7 @@ function GuestChatInput({
         }
 
         onModeChange(response.mode);
+        onThreadResolved(response.threadId, response.mode);
         onMessagesReplace(
           optimisticMessage.id,
           response.messages.map((message) => ({ ...message, optimistic: false })),
@@ -1594,6 +1719,7 @@ function GuestChatInput({
         }
 
         onModeChange(response.mode);
+        onThreadResolved(response.threadId, response.mode);
         onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
         return;
       }
@@ -1677,7 +1803,12 @@ function GuestChatInput({
         </div>
       ) : null}
 
-      <div className="border-t border-[#e7ddd8] bg-white pb-[max(env(safe-area-inset-bottom),0px)]">
+      <div
+        className="border-t border-[#e7ddd8] bg-white"
+        style={{
+          paddingBottom: `calc(max(env(safe-area-inset-bottom), 0px) + ${keyboardInset}px)`,
+        }}
+      >
         <div className="flex items-end gap-2 px-3 pb-2 pt-2 lg:px-8">
         <button
           type="button"
@@ -1750,13 +1881,14 @@ function GuestQaSheet({
   language,
   knowledge,
   prompts,
+  localizedGuideLabels,
   open,
   onClose,
   onMessagesAppend,
 }: GuestQaSheetProps) {
   const ui = getGuestUiCopy(language);
   const actionCopy = getGuestActionCopy(language);
-  const aiGuideOptions = buildAiGuideOptions(language, knowledge, prompts);
+  const aiGuideOptions = buildAiGuideOptions(language, knowledge, prompts, localizedGuideLabels);
   const [error, setError] = useState<string | null>(null);
   const submitLockRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1893,6 +2025,7 @@ export function GuestChatExperience({
   language,
   knowledge,
   prompts,
+  localizedGuideLabels,
   initialMessages,
   initialMode,
   initialThreadId,
@@ -1910,6 +2043,8 @@ export function GuestChatExperience({
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const [isQaOpen, setIsQaOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const activeModeRef = useRef<"ai" | "human">(initialMode);
+  const currentThreadIdRef = useRef<string | null>(initialThreadId);
 
   const removeOptimisticMessage = (messageId: string) => {
     setChatMessages((current) => current.filter((message) => message.id !== messageId));
@@ -1948,6 +2083,14 @@ export function GuestChatExperience({
   }, [initialMode, initialThreadId, initialThreadMeta, roomId]);
 
   useEffect(() => {
+    activeModeRef.current = activeMode;
+  }, [activeMode]);
+
+  useEffect(() => {
+    currentThreadIdRef.current = currentThreadId;
+  }, [currentThreadId]);
+
+  useEffect(() => {
     if (!clearThreadQueryOnMount) {
       return;
     }
@@ -1957,7 +2100,15 @@ export function GuestChatExperience({
 
   const refreshMessages = useEffectEvent(async () => {
     try {
-      const response = await fetch(`/api/guest/rooms/${roomId}/messages?mode=${activeMode}`, {
+      const requestedMode = activeModeRef.current;
+      const requestedThreadId = currentThreadIdRef.current;
+      const searchParams = new URLSearchParams({ mode: requestedMode });
+
+      if (requestedThreadId) {
+        searchParams.set("thread", requestedThreadId);
+      }
+
+      const response = await fetch(`/api/guest/rooms/${roomId}/messages?${searchParams.toString()}`, {
         method: "GET",
         cache: "no-store",
       });
@@ -1980,7 +2131,15 @@ export function GuestChatExperience({
         ...message,
         optimistic: false,
       }));
-      setActiveMode(payload.mode ?? activeMode);
+
+      if (
+        activeModeRef.current !== requestedMode ||
+        currentThreadIdRef.current !== requestedThreadId
+      ) {
+        return;
+      }
+
+      setActiveMode(payload.mode ?? requestedMode);
       setCurrentThreadId(payload.threadId ?? null);
       setThreadMeta({
         handoffStatus: payload.meta?.handoffStatus ?? null,
@@ -2350,6 +2509,16 @@ export function GuestChatExperience({
         language={language}
         richMenu={richMenu}
         onModeChange={setActiveMode}
+        onThreadResolved={(threadId, mode) => {
+          setCurrentThreadId(threadId);
+          setActiveMode(mode);
+          if (mode === "human") {
+            setThreadMeta((current) => ({
+              ...current,
+              handoffStatus: current.handoffStatus ?? "requested",
+            }));
+          }
+        }}
         onMessagesReplace={replaceOptimisticMessage}
         onMessagesAppend={appendMessages}
         onOptimisticRemove={removeOptimisticMessage}
@@ -2362,6 +2531,7 @@ export function GuestChatExperience({
         language={language}
         knowledge={knowledge}
         prompts={prompts}
+        localizedGuideLabels={localizedGuideLabels}
         open={isQaOpen}
         onClose={() => {
           setIsQaOpen(false);

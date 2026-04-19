@@ -175,6 +175,8 @@ function getOpenAiTranslationModel() {
   return value && value.length > 0 ? value : GUEST_DEFAULT_TRANSLATION_MODEL;
 }
 
+const guideLabelTranslationCache = new Map<string, string>();
+
 async function translateTextWithOpenAi({
   text,
   sourceLanguage,
@@ -282,6 +284,63 @@ async function translateTextWithOpenAi({
 
   const parsed = JSON.parse(outputText) as OpenAiTranslationResponse;
   return parsed.translated_text?.trim() || null;
+}
+
+export async function localizeGuideLabels(
+  texts: string[],
+  language: GuestLanguage,
+) {
+  if (language === "ja") {
+    return {} as Record<string, string>;
+  }
+
+  const uniqueTexts = [...new Set(
+    texts
+      .map((text) => text.trim())
+      .filter((text) => text.length > 0),
+  )];
+
+  if (uniqueTexts.length === 0 || !getOpenAiApiKey()) {
+    return {} as Record<string, string>;
+  }
+
+  await Promise.all(
+    uniqueTexts.map(async (text) => {
+      const cacheKey = `${language}:${text}`;
+
+      if (guideLabelTranslationCache.has(cacheKey)) {
+        return;
+      }
+
+      try {
+        const translated = await translateTextWithOpenAi({
+          text,
+          sourceLanguage: "ja",
+          targetLanguage: toLanguageCode(language),
+        });
+
+        if (translated?.trim()) {
+          guideLabelTranslationCache.set(cacheKey, translated.trim());
+        }
+      } catch (error) {
+        console.error("[guest/guide-labels] translation failed", {
+          language,
+          text,
+          error,
+        });
+      }
+    }),
+  );
+
+  return uniqueTexts.reduce<Record<string, string>>((result, text) => {
+    const translated = guideLabelTranslationCache.get(`${language}:${text}`);
+
+    if (translated) {
+      result[text] = translated;
+    }
+
+    return result;
+  }, {});
 }
 
 async function buildTranslationPayload({

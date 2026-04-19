@@ -31,6 +31,7 @@ export async function GET(
     const { roomId: accessToken } = await context.params;
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get("mode") === "human" ? "human" : "ai";
+    const threadId = searchParams.get("thread");
     let access;
 
     try {
@@ -59,6 +60,7 @@ export async function GET(
 
     const threadState = await resolveGuestConversationView(stayStatus, {
       requestedMode: mode,
+      threadId: threadId?.trim() ? threadId : null,
     });
 
     return Response.json({

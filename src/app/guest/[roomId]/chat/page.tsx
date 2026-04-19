@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { GuestChatExperience } from "@/components/guest/GuestChatExperience";
-import { resolveGuestConversationView } from "@/lib/guest-chat-data";
+import { localizeGuideLabels, resolveGuestConversationView } from "@/lib/guest-chat-data";
 import { getGuestActiveStayStatusFromStore } from "@/lib/guest-data";
 import { getGuestRichMenuByHotelId } from "@/lib/guest-rich-menu";
 import { resolveGuestAccess } from "@/lib/server/room-token";
@@ -106,12 +106,21 @@ export default async function GuestChatPage({
         knowledgeCounts: summarizeKnowledgeCounts(room.hearingSheetKnowledge),
       }
     : null;
-  const [threadState, richMenu] = await Promise.all([
+  const guideLabelSources = [
+    ...(room.hearingSheetKnowledge?.faq ?? []).flatMap((entry) =>
+      entry.question?.trim() ? [entry.question.trim()] : []
+    ),
+    ...room.hearingSheetPrompts
+      .map((prompt) => prompt.trim())
+      .filter((prompt) => prompt.length > 0),
+  ];
+  const [threadState, richMenu, localizedGuideLabels] = await Promise.all([
     resolveGuestConversationView(room, {
       requestedMode: mode === "human" ? "human" : mode === "ai" ? "ai" : null,
       threadId: threadId ?? null,
     }),
     getGuestRichMenuByHotelId(room.hotelId),
+    localizeGuideLabels(guideLabelSources, currentLanguage),
   ]);
 
   return (
@@ -125,6 +134,7 @@ export default async function GuestChatPage({
           language={currentLanguage}
           knowledge={room.hearingSheetKnowledge}
           prompts={room.hearingSheetPrompts}
+          localizedGuideLabels={localizedGuideLabels}
           initialMessages={threadState.messages}
           initialMode={threadState.mode}
           initialThreadId={threadState.threadId}

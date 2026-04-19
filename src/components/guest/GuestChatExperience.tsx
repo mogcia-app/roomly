@@ -2746,14 +2746,16 @@ export function GuestChatExperience({
       return;
     }
 
-    setChatMessages((current) => [...current, ...newMessages]);
+    setChatMessages((current) => mergeDisplayMessages(current, newMessages));
   };
 
   const replaceOptimisticMessage = (messageId: string, newMessages: DisplayMessage[]) => {
-    setChatMessages((current) => [
-      ...current.filter((message) => message.id !== messageId),
-      ...newMessages,
-    ]);
+    setChatMessages((current) =>
+      mergeDisplayMessages(
+        current.filter((message) => message.id !== messageId),
+        newMessages,
+      ),
+    );
   };
 
   const submitConfirmationReply = async (body: string) => {

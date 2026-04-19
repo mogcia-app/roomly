@@ -106,6 +106,18 @@ function hasRequiredRichMenuField(action: GuestRichMenuItem) {
   }
 }
 
+function isTaxiCategoryLabel(value?: string | null) {
+  const normalized = (value ?? "").trim().toLowerCase();
+
+  return (
+    normalized.includes("タクシ") ||
+    normalized.includes("taxi") ||
+    normalized.includes("計程車") ||
+    normalized.includes("出租车") ||
+    normalized.includes("택시")
+  );
+}
+
 function getGuestLocale(language: GuestLanguage) {
   if (language === "en") {
     return "en-US";
@@ -1710,27 +1722,39 @@ function GuestChatInput({
         action.actionType === "handoff_category" &&
         action.handoffCategory
       ) {
-        const optimisticMessage = createOptimisticMessage(
-          "handoff-category",
-          "guest",
-          action.handoffCategory,
-        );
-        onOptimisticSend(optimisticMessage);
+        const shouldEchoGuestMessage = !isTaxiCategoryLabel(action.handoffCategory);
+        const optimisticMessage = shouldEchoGuestMessage
+          ? createOptimisticMessage(
+              "handoff-category",
+              "guest",
+              action.handoffCategory,
+            )
+          : null;
+
+        if (optimisticMessage) {
+          onOptimisticSend(optimisticMessage);
+        }
 
         const response = await postHumanHandoff(action.handoffCategory);
 
         if (!response.ok) {
-          onOptimisticRemove(optimisticMessage.id);
+          if (optimisticMessage) {
+            onOptimisticRemove(optimisticMessage.id);
+          }
           setError(ui.handoffError);
           return;
         }
 
         onModeChange(response.mode);
         onThreadResolved(response.threadId, response.mode);
-        onMessagesReplace(
-          optimisticMessage.id,
-          response.messages.map((message) => ({ ...message, optimistic: false })),
-        );
+        if (optimisticMessage) {
+          onMessagesReplace(
+            optimisticMessage.id,
+            response.messages.map((message) => ({ ...message, optimistic: false })),
+          );
+        } else {
+          onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
+        }
         return;
       }
 

@@ -68,7 +68,6 @@ type GuestChatComposerProps = {
   richMenu: GuestRichMenu | null;
   onModeChange: (mode: "ai" | "human") => void;
   onThreadResolved: (threadId: string | null, mode: "ai" | "human") => void;
-  onMessagesReset: (messages: DisplayMessage[]) => void;
   onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
   onOptimisticRemove: (messageId: string) => void;
@@ -464,6 +463,27 @@ function areMessagesEquivalent(left: DisplayMessage[], right: DisplayMessage[]) 
       message.translationState === candidate.translationState &&
       message.handoffConfirmation === candidate.handoffConfirmation
     );
+  });
+}
+
+function mergeDisplayMessages(left: DisplayMessage[], right: DisplayMessage[]) {
+  const merged = [...left];
+  const seenIds = new Set(left.map((message) => message.id));
+
+  for (const message of right) {
+    if (seenIds.has(message.id)) {
+      continue;
+    }
+
+    merged.push(message);
+    seenIds.add(message.id);
+  }
+
+  return merged.sort((first, second) => {
+    const firstTime = first.timestamp ? Date.parse(first.timestamp) : 0;
+    const secondTime = second.timestamp ? Date.parse(second.timestamp) : 0;
+
+    return firstTime - secondTime;
   });
 }
 
@@ -1350,7 +1370,6 @@ function GuestChatInput({
   richMenu,
   onModeChange,
   onThreadResolved,
-  onMessagesReset,
   onMessagesReplace,
   onMessagesAppend,
   onOptimisticRemove,
@@ -1643,7 +1662,7 @@ function GuestChatInput({
 
         onModeChange("human");
         onThreadResolved(response.threadId, response.mode);
-        onMessagesReset(response.messages.map((message) => ({ ...message, optimistic: false })));
+        onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
         return;
       }
 
@@ -1727,7 +1746,7 @@ function GuestChatInput({
             response.messages.map((message) => ({ ...message, optimistic: false })),
           );
         } else {
-          onMessagesReset(response.messages.map((message) => ({ ...message, optimistic: false })));
+          onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
         }
         return;
       }
@@ -2181,12 +2200,13 @@ export function GuestChatExperience({
       setChatMessages((current) => {
         const optimisticMessages = current.filter((message) => message.optimistic);
         const persistedMessages = current.filter((message) => !message.optimistic);
+        const mergedMessages = mergeDisplayMessages(persistedMessages, fetchedMessages);
 
-        if (areMessagesEquivalent(persistedMessages, fetchedMessages)) {
+        if (areMessagesEquivalent(persistedMessages, mergedMessages)) {
           return current;
         }
 
-        return [...fetchedMessages, ...optimisticMessages];
+        return mergeDisplayMessages(mergedMessages, optimisticMessages);
       });
     } catch {
       return;
@@ -2273,10 +2293,6 @@ export function GuestChatExperience({
       ...current.filter((message) => message.id !== messageId),
       ...newMessages,
     ]);
-  };
-
-  const resetMessages = (newMessages: DisplayMessage[]) => {
-    setChatMessages(newMessages);
   };
 
   const submitConfirmationReply = async (body: string) => {
@@ -2552,7 +2568,6 @@ export function GuestChatExperience({
             }));
           }
         }}
-        onMessagesReset={resetMessages}
         onMessagesReplace={replaceOptimisticMessage}
         onMessagesAppend={appendMessages}
         onOptimisticRemove={removeOptimisticMessage}

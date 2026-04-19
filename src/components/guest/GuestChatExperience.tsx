@@ -321,6 +321,16 @@ function normalizeGuideLookupKey(value: string) {
     .toLowerCase();
 }
 
+function matchesGuideLookupKey(source: string | null | undefined, targetKey: string) {
+  const sourceKey = normalizeGuideLookupKey(source ?? "");
+
+  if (!sourceKey || !targetKey) {
+    return false;
+  }
+
+  return sourceKey === targetKey || sourceKey.includes(targetKey) || targetKey.includes(sourceKey);
+}
+
 function buildGuideDetail(
   card: GuideCard,
   knowledge?: HearingSheetKnowledge | null,
@@ -332,7 +342,7 @@ function buildGuideDetail(
   const titleKey = normalizeGuideLookupKey(card.title);
 
   const facilityLocation = knowledge.facilityLocations.find((entry) =>
-    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+    matchesGuideLookupKey(entry.name, titleKey),
   );
 
   if (facilityLocation) {
@@ -346,7 +356,7 @@ function buildGuideDetail(
   }
 
   const facility = knowledge.facilities.find((entry) =>
-    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+    matchesGuideLookupKey(entry.name, titleKey),
   );
 
   if (facility) {
@@ -360,7 +370,7 @@ function buildGuideDetail(
   }
 
   const bath = knowledge.baths.find((entry) =>
-    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+    matchesGuideLookupKey(entry.name, titleKey),
   );
 
   if (bath) {
@@ -375,7 +385,7 @@ function buildGuideDetail(
   }
 
   const amenity = knowledge.amenities.find((entry) =>
-    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+    matchesGuideLookupKey(entry.name, titleKey),
   );
 
   if (amenity) {
@@ -396,7 +406,7 @@ function buildGuideDetail(
   }
 
   const parking = knowledge.parking.find((entry) =>
-    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+    matchesGuideLookupKey(entry.name, titleKey),
   );
 
   if (parking) {
@@ -416,7 +426,7 @@ function buildGuideDetail(
   }
 
   const roomService = knowledge.roomService.find((entry) =>
-    normalizeGuideLookupKey(entry.menuName ?? "") === titleKey,
+    matchesGuideLookupKey(entry.menuName, titleKey),
   );
 
   if (roomService) {
@@ -432,7 +442,7 @@ function buildGuideDetail(
   }
 
   const transport = knowledge.transport.find((entry) =>
-    normalizeGuideLookupKey(entry.companyName ?? "") === titleKey,
+    matchesGuideLookupKey(entry.companyName, titleKey),
   );
 
   if (transport) {
@@ -449,7 +459,7 @@ function buildGuideDetail(
   }
 
   const nearby = knowledge.nearbySpots.find((entry) =>
-    normalizeGuideLookupKey(entry.name ?? "") === titleKey,
+    matchesGuideLookupKey(entry.name, titleKey),
   );
 
   if (nearby) {

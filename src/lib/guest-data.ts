@@ -365,13 +365,53 @@ function parseFrontDeskHours(value: unknown) {
   return text ? [text] : [];
 }
 
+function readLabeledNote(entry: Record<string, unknown>) {
+  const label = readString(entry.label);
+  const content = readString(entry.content) ?? readString(entry.note);
+
+  if (!content) {
+    return null;
+  }
+
+  return label ? `${label}: ${content}` : content;
+}
+
+function extractEntryNotes(entry: Record<string, unknown>) {
+  const noteEntries = [
+    ...toEntryArray(entry.note_entries, ["label", "content", "note"]),
+    ...toEntryArray(entry.noteEntries, ["label", "content", "note"]),
+    ...toEntryArray(entry.notes, ["label", "content", "note"]),
+  ]
+    .map(readLabeledNote)
+    .filter((value): value is string => value !== null);
+  const directNote = readString(entry.note);
+
+  return [...new Set([
+    ...noteEntries,
+    ...(directNote ? [directNote] : []),
+  ])];
+}
+
+function summarizeNotes(notes: string[]) {
+  if (notes.length === 0) {
+    return null;
+  }
+
+  return notes.slice(0, 2).join("\n");
+}
+
 function parseWifiNetworks(value: unknown): HearingSheetWifiEntry[] {
-  return toEntryArray(value, ["floor", "ssid", "password", "note"]).map((entry) => ({
-    floor: readString(entry.floor),
-    ssid: readString(entry.ssid),
-    password: readString(entry.password),
-    note: readString(entry.note),
-  }));
+  return toEntryArray(value, ["floor", "ssid", "password", "note", "note_entries", "notes"]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      floor: readString(entry.floor),
+      ssid: readString(entry.ssid),
+      password: readString(entry.password),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseBreakfastEntries(value: unknown): HearingSheetBreakfastEntry[] {
@@ -383,43 +423,65 @@ function parseBreakfastEntries(value: unknown): HearingSheetBreakfastEntry[] {
     "reservationRequired",
     "reservation_required",
     "note",
-  ]).map((entry) => ({
-    style: readString(entry.style),
-    hours: readString(entry.hours),
-    location: readString(entry.location),
-    price: readString(entry.price),
-    reservationRequired: readBoolean(
-      entry.reservationRequired ?? entry.reservation_required,
-    ),
-    note: readString(entry.note),
-  }));
+    "note_entries",
+    "notes",
+  ]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      style: readString(entry.style),
+      hours: readString(entry.hours),
+      location: readString(entry.location),
+      price: readString(entry.price),
+      reservationRequired: readBoolean(
+        entry.reservationRequired ?? entry.reservation_required,
+      ),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseBathEntries(value: unknown): HearingSheetBathEntry[] {
-  return toEntryArray(value, ["name", "hours", "location", "note"]).map((entry) => ({
-    name: readString(entry.name),
-    hours: readString(entry.hours),
-    location: readString(entry.location),
-    note: readString(entry.note),
-  }));
+  return toEntryArray(value, ["name", "hours", "location", "note", "note_entries", "notes"]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      name: readString(entry.name),
+      hours: readString(entry.hours),
+      location: readString(entry.location),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseFacilityEntries(value: unknown): HearingSheetFacilityEntry[] {
-  return toEntryArray(value, ["name", "hours", "note"]).map((entry) => ({
-    name: readString(entry.name),
-    hours: readString(entry.hours),
-    note: readString(entry.note),
-  }));
+  return toEntryArray(value, ["name", "hours", "note", "note_entries", "notes"]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      name: readString(entry.name),
+      hours: readString(entry.hours),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseFacilityLocationEntries(
   value: unknown,
 ): HearingSheetFacilityLocationEntry[] {
-  return toEntryArray(value, ["name", "floor", "note"]).map((entry) => ({
-    name: readString(entry.name),
-    floor: readString(entry.floor),
-    note: readString(entry.note),
-  }));
+  return toEntryArray(value, ["name", "floor", "note", "note_entries", "notes"]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      name: readString(entry.name),
+      floor: readString(entry.floor),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseAmenityEntries(value: unknown): HearingSheetAmenityEntry[] {
@@ -433,16 +495,23 @@ function parseAmenityEntries(value: unknown): HearingSheetAmenityEntry[] {
     "request_method",
     "price",
     "note",
-  ]).map((entry) => ({
-    name: readString(entry.name),
-    inRoom: readBoolean(entry.inRoom ?? entry.in_room),
-    availableOnRequest: readBoolean(
-      entry.availableOnRequest ?? entry.available_on_request,
-    ),
-    requestMethod: readString(entry.requestMethod ?? entry.request_method),
-    price: readString(entry.price),
-    note: readString(entry.note),
-  }));
+    "note_entries",
+    "notes",
+  ]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      name: readString(entry.name),
+      inRoom: readBoolean(entry.inRoom ?? entry.in_room),
+      availableOnRequest: readBoolean(
+        entry.availableOnRequest ?? entry.available_on_request,
+      ),
+      requestMethod: readString(entry.requestMethod ?? entry.request_method),
+      price: readString(entry.price),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseParkingEntries(value: unknown): HearingSheetParkingEntry[] {
@@ -455,26 +524,38 @@ function parseParkingEntries(value: unknown): HearingSheetParkingEntry[] {
     "reservation_required",
     "location",
     "note",
-  ]).map((entry) => ({
-    name: readString(entry.name),
-    capacity: readString(entry.capacity),
-    price: readString(entry.price),
-    hours: readString(entry.hours),
-    reservationRequired: readBoolean(
-      entry.reservationRequired ?? entry.reservation_required,
-    ),
-    location: readString(entry.location),
-    note: readString(entry.note),
-  }));
+    "note_entries",
+    "notes",
+  ]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      name: readString(entry.name),
+      capacity: readString(entry.capacity),
+      price: readString(entry.price),
+      hours: readString(entry.hours),
+      reservationRequired: readBoolean(
+        entry.reservationRequired ?? entry.reservation_required,
+      ),
+      location: readString(entry.location),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseEmergencyEntries(value: unknown): HearingSheetEmergencyEntry[] {
-  return toEntryArray(value, ["category", "contact", "steps", "note"]).map((entry) => ({
-    category: readString(entry.category),
-    contact: readString(entry.contact),
-    steps: readString(entry.steps),
-    note: readString(entry.note),
-  }));
+  return toEntryArray(value, ["category", "contact", "steps", "note", "note_entries", "notes"]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      category: readString(entry.category),
+      contact: readString(entry.contact),
+      steps: readString(entry.steps),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseFaqEntries(value: unknown): HearingSheetFaqEntry[] {
@@ -493,17 +574,24 @@ function parseCheckoutEntries(value: unknown): HearingSheetCheckoutEntry[] {
     "lateCheckoutPolicy",
     "late_checkout_policy",
     "note",
-  ]).map((entry) => ({
-    time: readString(entry.time),
-    method: readString(entry.method),
-    keyReturnLocation: readString(
-      entry.keyReturnLocation ?? entry.key_return_location,
-    ),
-    lateCheckoutPolicy: readString(
-      entry.lateCheckoutPolicy ?? entry.late_checkout_policy,
-    ),
-    note: readString(entry.note),
-  }));
+    "note_entries",
+    "notes",
+  ]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      time: readString(entry.time),
+      method: readString(entry.method),
+      keyReturnLocation: readString(
+        entry.keyReturnLocation ?? entry.key_return_location,
+      ),
+      lateCheckoutPolicy: readString(
+        entry.lateCheckoutPolicy ?? entry.late_checkout_policy,
+      ),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseRoomServiceEntries(value: unknown): HearingSheetRoomServiceEntry[] {
@@ -515,13 +603,20 @@ function parseRoomServiceEntries(value: unknown): HearingSheetRoomServiceEntry[]
     "order_method",
     "hours",
     "note",
-  ]).map((entry) => ({
-    menuName: readString(entry.menuName ?? entry.menu_name),
-    price: readString(entry.price),
-    orderMethod: readString(entry.orderMethod ?? entry.order_method),
-    hours: readString(entry.hours),
-    note: readString(entry.note),
-  }));
+    "note_entries",
+    "notes",
+  ]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      menuName: readString(entry.menuName ?? entry.menu_name),
+      price: readString(entry.price),
+      orderMethod: readString(entry.orderMethod ?? entry.order_method),
+      hours: readString(entry.hours),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseTransportEntries(value: unknown): HearingSheetTransportEntry[] {
@@ -535,14 +630,21 @@ function parseTransportEntries(value: unknown): HearingSheetTransportEntry[] {
     "priceNote",
     "price_note",
     "note",
-  ]).map((entry) => ({
-    companyName: readString(entry.companyName ?? entry.company_name),
-    serviceType: readString(entry.serviceType ?? entry.service_type),
-    phone: readString(entry.phone),
-    hours: readString(entry.hours),
-    priceNote: readString(entry.priceNote ?? entry.price_note),
-    note: readString(entry.note),
-  }));
+    "note_entries",
+    "notes",
+  ]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      companyName: readString(entry.companyName ?? entry.company_name),
+      serviceType: readString(entry.serviceType ?? entry.service_type),
+      phone: readString(entry.phone),
+      hours: readString(entry.hours),
+      priceNote: readString(entry.priceNote ?? entry.price_note),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseNearbySpotEntries(value: unknown): HearingSheetNearbySpotEntry[] {
@@ -553,14 +655,21 @@ function parseNearbySpotEntries(value: unknown): HearingSheetNearbySpotEntry[] {
     "hours",
     "location",
     "note",
-  ]).map((entry) => ({
-    name: readString(entry.name),
-    category: readString(entry.category),
-    distance: readString(entry.distance),
-    hours: readString(entry.hours),
-    location: readString(entry.location),
-    note: readString(entry.note),
-  }));
+    "note_entries",
+    "notes",
+  ]).map((entry) => {
+    const notes = extractEntryNotes(entry);
+
+    return {
+      name: readString(entry.name),
+      category: readString(entry.category),
+      distance: readString(entry.distance),
+      hours: readString(entry.hours),
+      location: readString(entry.location),
+      note: summarizeNotes(notes),
+      notes,
+    };
+  });
 }
 
 function parseKnowledgeFromSource(

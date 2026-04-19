@@ -341,7 +341,7 @@ function buildGuideDetail(
       fields: [
         ...(facilityLocation.floor ? [{ label: "場所", value: facilityLocation.floor }] : []),
       ],
-      notes: facilityLocation.note ? [facilityLocation.note] : [],
+      notes: facilityLocation.notes?.length ? facilityLocation.notes : facilityLocation.note ? [facilityLocation.note] : [],
     };
   }
 
@@ -355,7 +355,7 @@ function buildGuideDetail(
       fields: [
         ...(facility.hours ? [{ label: "営業時間", value: facility.hours }] : []),
       ],
-      notes: facility.note ? [facility.note] : [],
+      notes: facility.notes?.length ? facility.notes : facility.note ? [facility.note] : [],
     };
   }
 
@@ -370,7 +370,7 @@ function buildGuideDetail(
         ...(bath.location ? [{ label: "場所", value: bath.location }] : []),
         ...(bath.hours ? [{ label: "営業時間", value: bath.hours }] : []),
       ],
-      notes: bath.note ? [bath.note] : [],
+      notes: bath.notes?.length ? bath.notes : bath.note ? [bath.note] : [],
     };
   }
 
@@ -391,7 +391,7 @@ function buildGuideDetail(
         ...(amenity.requestMethod ? [{ label: "依頼方法", value: amenity.requestMethod }] : []),
         ...(amenity.price ? [{ label: "料金", value: amenity.price }] : []),
       ],
-      notes: amenity.note ? [amenity.note] : [],
+      notes: amenity.notes?.length ? amenity.notes : amenity.note ? [amenity.note] : [],
     };
   }
 
@@ -411,7 +411,7 @@ function buildGuideDetail(
           ? [{ label: "予約", value: parking.reservationRequired ? "必要" : "不要" }]
           : []),
       ],
-      notes: parking.note ? [parking.note] : [],
+      notes: parking.notes?.length ? parking.notes : parking.note ? [parking.note] : [],
     };
   }
 
@@ -427,7 +427,7 @@ function buildGuideDetail(
         ...(roomService.orderMethod ? [{ label: "注文方法", value: roomService.orderMethod }] : []),
         ...(roomService.hours ? [{ label: "対応時間", value: roomService.hours }] : []),
       ],
-      notes: roomService.note ? [roomService.note] : [],
+      notes: roomService.notes?.length ? roomService.notes : roomService.note ? [roomService.note] : [],
     };
   }
 
@@ -444,7 +444,7 @@ function buildGuideDetail(
         ...(transport.hours ? [{ label: "対応時間", value: transport.hours }] : []),
         ...(transport.priceNote ? [{ label: "料金", value: transport.priceNote }] : []),
       ],
-      notes: transport.note ? [transport.note] : [],
+      notes: transport.notes?.length ? transport.notes : transport.note ? [transport.note] : [],
     };
   }
 
@@ -461,7 +461,7 @@ function buildGuideDetail(
         ...(nearby.hours ? [{ label: "営業時間", value: nearby.hours }] : []),
         ...(nearby.location ? [{ label: "場所", value: nearby.location }] : []),
       ],
-      notes: nearby.note ? [nearby.note] : [],
+      notes: nearby.notes?.length ? nearby.notes : nearby.note ? [nearby.note] : [],
     };
   }
 
@@ -476,7 +476,7 @@ function buildGuideDetail(
         ...(checkout.keyReturnLocation ? [{ label: "鍵の返却", value: checkout.keyReturnLocation }] : []),
         ...(checkout.lateCheckoutPolicy ? [{ label: "レイトチェックアウト", value: checkout.lateCheckoutPolicy }] : []),
       ],
-      notes: checkout.note ? [checkout.note] : [],
+      notes: checkout.notes?.length ? checkout.notes : checkout.note ? [checkout.note] : [],
     };
   }
 

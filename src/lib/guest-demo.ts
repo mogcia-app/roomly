@@ -48,6 +48,7 @@ export type HearingSheetWifiEntry = {
   ssid: string | null;
   password: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetBreakfastEntry = {
@@ -57,6 +58,7 @@ export type HearingSheetBreakfastEntry = {
   price: string | null;
   reservationRequired: boolean | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetBathEntry = {
@@ -64,18 +66,21 @@ export type HearingSheetBathEntry = {
   hours: string | null;
   location: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetFacilityEntry = {
   name: string | null;
   hours: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetFacilityLocationEntry = {
   name: string | null;
   floor: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetAmenityEntry = {
@@ -85,6 +90,7 @@ export type HearingSheetAmenityEntry = {
   requestMethod: string | null;
   price: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetParkingEntry = {
@@ -95,6 +101,7 @@ export type HearingSheetParkingEntry = {
   reservationRequired: boolean | null;
   location: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetEmergencyEntry = {
@@ -102,6 +109,7 @@ export type HearingSheetEmergencyEntry = {
   contact: string | null;
   steps: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetFaqEntry = {
@@ -115,6 +123,7 @@ export type HearingSheetCheckoutEntry = {
   keyReturnLocation: string | null;
   lateCheckoutPolicy: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetRoomServiceEntry = {
@@ -123,6 +132,7 @@ export type HearingSheetRoomServiceEntry = {
   orderMethod: string | null;
   hours: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetTransportEntry = {
@@ -132,6 +142,7 @@ export type HearingSheetTransportEntry = {
   hours: string | null;
   priceNote: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetNearbySpotEntry = {
@@ -141,6 +152,7 @@ export type HearingSheetNearbySpotEntry = {
   hours: string | null;
   location: string | null;
   note: string | null;
+  notes?: string[];
 };
 
 export type HearingSheetKnowledge = {

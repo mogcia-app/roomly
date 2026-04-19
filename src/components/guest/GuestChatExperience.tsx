@@ -62,16 +62,27 @@ type DisplayMessage = GuestMessage & {
   optimistic?: boolean;
 };
 
+type InteractionState =
+  | "message"
+  | "rich-menu"
+  | "ai-guide"
+  | "handoff"
+  | "quick-reply"
+  | "language"
+  | null;
+
 type GuestChatComposerProps = {
   roomId: string;
   language: GuestLanguage;
   richMenu: GuestRichMenu | null;
+  interactionState: InteractionState;
   onModeChange: (mode: "ai" | "human") => void;
   onThreadResolved: (threadId: string | null, mode: "ai" | "human") => void;
   onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
   onOptimisticRemove: (messageId: string) => void;
   onOptimisticSend: (message: DisplayMessage) => void;
+  onInteractionStateChange: (state: InteractionState) => void;
 };
 
 type GuestQaSheetProps = {
@@ -81,9 +92,11 @@ type GuestQaSheetProps = {
   prompts: string[];
   localizedGuideLabels?: Record<string, string>;
   open: boolean;
+  interactionState: InteractionState;
   onClose: () => void;
   onThreadResolved: (threadId: string | null, mode: "ai" | "human") => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
+  onInteractionStateChange: (state: InteractionState) => void;
 };
 
 let optimisticMessageSequence = 0;
@@ -694,6 +707,143 @@ function getHandoffStatusNotice(
   }
 
   return "フロントに通知しました。返信はこの画面に表示されます。画面を閉じず、このままお待ちください。";
+}
+
+function getBusyNotice(language: GuestLanguage, interactionState: InteractionState) {
+  if (!interactionState) {
+    return null;
+  }
+
+  if (language === "en") {
+    switch (interactionState) {
+      case "message":
+      case "quick-reply":
+        return "Sending your message. Please wait a moment before tapping anything else.";
+      case "rich-menu":
+        return "Processing your selection. Please wait before tapping another menu.";
+      case "ai-guide":
+        return "Loading the guide reply. Please wait a moment.";
+      case "handoff":
+        return "Contacting the front desk. Please wait on this screen.";
+      case "language":
+        return "Updating the language. Please wait a moment.";
+      default:
+        return "Processing your request. Please wait a moment.";
+    }
+  }
+
+  if (language === "zh-CN") {
+    switch (interactionState) {
+      case "message":
+      case "quick-reply":
+        return "正在发送消息。请稍候，不要重复点击其他按钮。";
+      case "rich-menu":
+        return "正在处理所选菜单。请稍候。";
+      case "ai-guide":
+        return "正在获取指南内容，请稍候。";
+      case "handoff":
+        return "正在通知前台。请停留在此画面稍候。";
+      case "language":
+        return "正在切换语言，请稍候。";
+      default:
+        return "正在处理中，请稍候。";
+    }
+  }
+
+  if (language === "zh-TW") {
+    switch (interactionState) {
+      case "message":
+      case "quick-reply":
+        return "正在傳送訊息。請稍候，不要重複點擊其他按鈕。";
+      case "rich-menu":
+        return "正在處理所選選單，請稍候。";
+      case "ai-guide":
+        return "正在取得指南內容，請稍候。";
+      case "handoff":
+        return "正在通知櫃台。請停留在此畫面稍候。";
+      case "language":
+        return "正在切換語言，請稍候。";
+      default:
+        return "正在處理中，請稍候。";
+    }
+  }
+
+  if (language === "ko") {
+    switch (interactionState) {
+      case "message":
+      case "quick-reply":
+        return "메시지를 보내는 중입니다. 다른 버튼은 잠시만 기다려 주세요.";
+      case "rich-menu":
+        return "선택한 메뉴를 처리하는 중입니다. 잠시만 기다려 주세요.";
+      case "ai-guide":
+        return "안내 답변을 불러오는 중입니다. 잠시만 기다려 주세요.";
+      case "handoff":
+        return "프런트에 전달하는 중입니다. 이 화면에서 잠시만 기다려 주세요.";
+      case "language":
+        return "언어를 변경하는 중입니다. 잠시만 기다려 주세요.";
+      default:
+        return "처리 중입니다. 잠시만 기다려 주세요.";
+    }
+  }
+
+  switch (interactionState) {
+    case "message":
+    case "quick-reply":
+      return "メッセージを送信しています。ほかのボタンは少し待ってください。";
+    case "rich-menu":
+      return "選択したメニューを処理しています。少しお待ちください。";
+    case "ai-guide":
+      return "案内を確認しています。少しお待ちください。";
+    case "handoff":
+      return "フロントへ連絡しています。このまま少しお待ちください。";
+    case "language":
+      return "言語を切り替えています。少しお待ちください。";
+    default:
+      return "処理中です。少しお待ちください。";
+  }
+}
+
+function getBusyLabel(language: GuestLanguage, interactionState: InteractionState) {
+  if (!interactionState) {
+    return null;
+  }
+
+  if (language === "en") {
+    return interactionState === "message" || interactionState === "quick-reply"
+      ? "Sending..."
+      : "Processing...";
+  }
+
+  if (language === "zh-CN") {
+    return interactionState === "message" || interactionState === "quick-reply"
+      ? "发送中..."
+      : "处理中...";
+  }
+
+  if (language === "zh-TW") {
+    return interactionState === "message" || interactionState === "quick-reply"
+      ? "傳送中..."
+      : "處理中...";
+  }
+
+  if (language === "ko") {
+    return interactionState === "message" || interactionState === "quick-reply"
+      ? "전송 중..."
+      : "처리 중...";
+  }
+
+  return interactionState === "message" || interactionState === "quick-reply"
+    ? "送信中..."
+    : "処理中...";
+}
+
+function InlineSpinner() {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent"
+    />
+  );
 }
 
 function areMessagesEquivalent(left: DisplayMessage[], right: DisplayMessage[]) {
@@ -1620,12 +1770,14 @@ function GuestChatInput({
   roomId,
   language,
   richMenu,
+  interactionState,
   onModeChange,
   onThreadResolved,
   onMessagesReplace,
   onMessagesAppend,
   onOptimisticRemove,
   onOptimisticSend,
+  onInteractionStateChange,
 }: GuestChatComposerProps) {
   const router = useRouter();
   const ui = getGuestUiCopy(language);
@@ -1639,7 +1791,9 @@ function GuestChatInput({
   const [keyboardInset, setKeyboardInset] = useState(0);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const isBusy = isPending || isSubmitting;
+  const isBusy = interactionState !== null || isPending || isSubmitting;
+  const busyNotice = getBusyNotice(language, interactionState);
+  const busyLabel = getBusyLabel(language, interactionState);
   const isIosSafari =
     typeof window !== "undefined" &&
     /iP(hone|ad|od)/.test(window.navigator.userAgent) &&
@@ -1822,12 +1976,13 @@ function GuestChatInput({
   async function submitMessage(body: string) {
     const trimmed = body.trim();
 
-    if (!trimmed || submitLockRef.current) {
+    if (!trimmed || submitLockRef.current || interactionState) {
       return;
     }
 
     submitLockRef.current = true;
     setIsSubmitting(true);
+    onInteractionStateChange("message");
 
     const optimisticMessage = createOptimisticMessage("optimistic", "guest", trimmed);
     onOptimisticSend(optimisticMessage);
@@ -1852,11 +2007,12 @@ function GuestChatInput({
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
+      onInteractionStateChange(null);
     }
   }
 
   async function submitRichMenuAction(action: GuestRichMenuItem) {
-    if (submitLockRef.current) {
+    if (submitLockRef.current || interactionState) {
       return;
     }
 
@@ -1901,6 +2057,7 @@ function GuestChatInput({
       }
 
       if (action.actionType === "ai_prompt" && action.prompt) {
+        onInteractionStateChange("handoff");
         const response = await postHumanHandoff({
           category: action.label,
           prompt: action.prompt,
@@ -1919,6 +2076,7 @@ function GuestChatInput({
       }
 
       if (action.actionType === "ai_message" && (action.messageText || action.messageImageUrl)) {
+        onInteractionStateChange("rich-menu");
         const optimisticMessage =
           language === "ja"
             ? createOptimisticRichMessage(
@@ -1967,6 +2125,7 @@ function GuestChatInput({
         action.actionType === "handoff_category" &&
         action.handoffCategory
       ) {
+        onInteractionStateChange("handoff");
         const shouldEchoGuestMessage = !isTaxiCategoryLabel(action.handoffCategory);
         const optimisticMessage = shouldEchoGuestMessage
           ? createOptimisticMessage(
@@ -2004,6 +2163,7 @@ function GuestChatInput({
       }
 
       if (action.actionType === "human_handoff") {
+        onInteractionStateChange("handoff");
         const response = await postHumanHandoff();
 
         if (!response.ok) {
@@ -2019,6 +2179,7 @@ function GuestChatInput({
 
         if (action.actionType === "language") {
           if (action.languageCode) {
+            onInteractionStateChange("language");
             const languageCode = action.languageCode;
             const response = await switchLanguage(languageCode);
 
@@ -2038,6 +2199,7 @@ function GuestChatInput({
             return;
           }
 
+        onInteractionStateChange("language");
         startTransition(() => {
           router.push(`/guest/${roomId}/language`);
         });
@@ -2045,6 +2207,7 @@ function GuestChatInput({
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
+      onInteractionStateChange(null);
     }
   }
 
@@ -2090,6 +2253,14 @@ function GuestChatInput({
                     }}
                   />
                 ))}
+                {interactionState === "rich-menu" || interactionState === "handoff" || interactionState === "language" ? (
+                  <div className="pointer-events-none absolute inset-x-3 top-3 rounded-full bg-[rgba(37,24,21,0.72)] px-3 py-2 text-center text-[11px] font-light text-white backdrop-blur-sm">
+                    <span className="inline-flex items-center gap-2">
+                      <InlineSpinner />
+                      {busyNotice}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -2108,7 +2279,7 @@ function GuestChatInput({
           type="button"
           aria-expanded={isRichMenuOpen}
           aria-label="Open quick menu"
-          disabled={!richMenu}
+          disabled={!richMenu || isBusy}
           onClick={() => {
             setIsRichMenuOpen((current) => !current);
           }}
@@ -2153,11 +2324,24 @@ function GuestChatInput({
               type="button"
               disabled={!message.trim() || isBusy}
               onClick={() => submitMessage(message)}
-              className="flex h-10 min-w-[56px] items-center justify-center border border-[#981d15] bg-[#ad2218] px-4 text-sm font-light text-white disabled:opacity-60 lg:h-10 lg:min-w-[56px] lg:px-4 lg:text-[12px]"
+              className="flex h-10 min-w-[88px] items-center justify-center gap-2 border border-[#981d15] bg-[#ad2218] px-4 text-sm font-light text-white disabled:opacity-60 lg:h-10 lg:min-w-[88px] lg:px-4 lg:text-[12px]"
             >
-              {isBusy ? "..." : ui.sendLabel}
+              {interactionState ? (
+                <>
+                  <InlineSpinner />
+                  <span>{busyLabel ?? ui.sendingLabel}</span>
+                </>
+              ) : (
+                ui.sendLabel
+              )}
             </button>
           </div>
+          {busyNotice ? (
+            <div className="mt-1 flex items-center gap-2 px-2 text-[11px] text-[#8b776e]">
+              <InlineSpinner />
+              <span>{busyNotice}</span>
+            </div>
+          ) : null}
           {error ? (
             <div className="mt-2 rounded-[18px] border border-[#f2d3cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#ad2218]">
               {error}
@@ -2177,9 +2361,11 @@ function GuestQaSheet({
   prompts,
   localizedGuideLabels,
   open,
+  interactionState,
   onClose,
   onThreadResolved,
   onMessagesAppend,
+  onInteractionStateChange,
 }: GuestQaSheetProps) {
   const ui = getGuestUiCopy(language);
   const actionCopy = getGuestActionCopy(language);
@@ -2187,16 +2373,18 @@ function GuestQaSheet({
   const [error, setError] = useState<string | null>(null);
   const submitLockRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isBusy = isSubmitting;
+  const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null);
+  const isBusy = isSubmitting || interactionState !== null;
 
   async function submitAiPrompt(body: string) {
-    if (submitLockRef.current) {
+    if (submitLockRef.current || interactionState) {
       return;
     }
 
     submitLockRef.current = true;
     setIsSubmitting(true);
     setError(null);
+    onInteractionStateChange("ai-guide");
 
     try {
       const rawResponse = await fetch(`/api/guest/rooms/${roomId}/messages`, {
@@ -2228,6 +2416,8 @@ function GuestQaSheet({
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
+      setPendingOptionKey(null);
+      onInteractionStateChange(null);
     }
   }
 
@@ -2242,9 +2432,13 @@ function GuestQaSheet({
         role="button"
         aria-label="Close Q&A"
         tabIndex={0}
-        onClick={onClose}
+        onClick={() => {
+          if (!interactionState) {
+            onClose();
+          }
+        }}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
+          if ((event.key === "Enter" || event.key === " ") && !interactionState) {
             onClose();
           }
         }}
@@ -2260,8 +2454,9 @@ function GuestQaSheet({
           </div>
           <button
             type="button"
+            disabled={interactionState !== null}
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#7a6056]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#7a6056] disabled:opacity-50"
           >
             ×
           </button>
@@ -2273,14 +2468,26 @@ function GuestQaSheet({
               type="button"
               disabled={isBusy}
               onClick={() => {
+                setPendingOptionKey(option.key);
                 void submitAiPrompt(option.prompt);
               }}
               className="rounded-full border border-[#e7ddd8] bg-white px-3.5 py-2 text-[12px] font-light text-[#7a554a] disabled:opacity-60"
             >
-              {option.label}
+              <span className="inline-flex items-center gap-2">
+                {pendingOptionKey === option.key ? <InlineSpinner /> : null}
+                <span>{option.label}</span>
+              </span>
             </button>
           ))}
         </div>
+        {interactionState ? (
+          <div className="mt-4 rounded-[16px] border border-[#eadfd8] bg-white px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
+            <span className="inline-flex items-center gap-2">
+              <InlineSpinner />
+              {getBusyNotice(language, interactionState)}
+            </span>
+          </div>
+        ) : null}
         {!aiGuideOptions.length ? (
           <div className="mt-4 rounded-[18px] border border-[#ebe1dc] bg-white px-4 py-3 text-[12px] leading-5 text-[#7a6056]">
             {getQaHelperText(language)}
@@ -2343,6 +2550,7 @@ export function GuestChatExperience({
   const [isQuickReplySubmitting, setIsQuickReplySubmitting] = useState(false);
   const [isQaOpen, setIsQaOpen] = useState(false);
   const [selectedGuideDetail, setSelectedGuideDetail] = useState<GuideDetail | null>(null);
+  const [interactionState, setInteractionState] = useState<InteractionState>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const activeModeRef = useRef<"ai" | "human">(initialMode);
   const currentThreadIdRef = useRef<string | null>(initialThreadId);
@@ -2549,7 +2757,7 @@ export function GuestChatExperience({
   };
 
   const submitConfirmationReply = async (body: string) => {
-    if (isQuickReplySubmitting) {
+    if (isQuickReplySubmitting || interactionState) {
       return;
     }
 
@@ -2561,6 +2769,7 @@ export function GuestChatExperience({
 
     const optimisticMessage = createOptimisticMessage("quick-reply", "guest", trimmed);
     setIsQuickReplySubmitting(true);
+    setInteractionState("quick-reply");
     setChatMessages((current) => [...current, optimisticMessage]);
 
     try {
@@ -2600,6 +2809,7 @@ export function GuestChatExperience({
       );
     } finally {
       setIsQuickReplySubmitting(false);
+      setInteractionState(null);
     }
   };
 
@@ -2619,10 +2829,11 @@ export function GuestChatExperience({
             </div>
             <button
               type="button"
+              disabled={interactionState !== null}
               onClick={() => {
                 setIsQaOpen(true);
               }}
-              className="inline-flex min-w-[72px] shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white px-3 py-1.5 text-[11px] font-light text-[#6f564b]"
+              className="inline-flex min-w-[72px] shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white px-3 py-1.5 text-[11px] font-light text-[#6f564b] disabled:opacity-50"
             >
               {getQaLabel(language)}
             </button>
@@ -2638,10 +2849,11 @@ export function GuestChatExperience({
             <button
               type="button"
               aria-label={getLanguageSettingsLabel(language)}
+              disabled={interactionState !== null}
               onClick={() => {
                 router.push(`/guest/${roomId}/language`);
               }}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#6f564b] transition-colors hover:bg-[#f7f1ec]"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#6f564b] transition-colors hover:bg-[#f7f1ec] disabled:opacity-50"
             >
               <svg
                 aria-hidden="true"
@@ -2810,6 +3022,7 @@ export function GuestChatExperience({
         roomId={roomId}
         language={language}
         richMenu={richMenu}
+        interactionState={interactionState}
         onModeChange={setActiveMode}
         onThreadResolved={(threadId, mode) => {
           setCurrentThreadId(threadId);
@@ -2827,6 +3040,7 @@ export function GuestChatExperience({
         onOptimisticSend={(message) => {
           setChatMessages((current) => [...current, message]);
         }}
+        onInteractionStateChange={setInteractionState}
       />
       <GuestQaSheet
         roomId={roomId}
@@ -2835,6 +3049,7 @@ export function GuestChatExperience({
         prompts={prompts}
         localizedGuideLabels={localizedGuideLabels}
         open={isQaOpen}
+        interactionState={interactionState}
         onClose={() => {
           setIsQaOpen(false);
         }}
@@ -2843,6 +3058,7 @@ export function GuestChatExperience({
           setActiveMode(mode);
         }}
         onMessagesAppend={appendMessages}
+        onInteractionStateChange={setInteractionState}
       />
       <GuideDetailSheet
         detail={selectedGuideDetail}

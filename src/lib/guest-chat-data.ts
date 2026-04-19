@@ -1817,7 +1817,8 @@ function formatRoomServiceEntry(entry: StructuredKnowledge["roomService"][number
 
 function formatTransportEntry(entry: StructuredKnowledge["transport"][number]) {
   return compactLines([
-    compactParts([entry.companyName, entry.serviceType]).join(" / "),
+    entry.companyName,
+    entry.serviceType ? `種別: ${entry.serviceType}` : null,
     entry.phone ? `電話: ${entry.phone}` : null,
     entry.hours ? `対応時間: ${entry.hours}` : null,
     entry.priceNote ? `料金: ${entry.priceNote}` : null,
@@ -1826,14 +1827,14 @@ function formatTransportEntry(entry: StructuredKnowledge["transport"][number]) {
 }
 
 function formatNearbySpotEntry(entry: StructuredKnowledge["nearbySpots"][number]) {
-  return compactParts([
+  return compactLines([
     entry.name,
-    entry.category,
+    entry.category ? `カテゴリ: ${entry.category}` : null,
     entry.distance ? `距離: ${entry.distance}` : null,
     entry.hours ? `営業時間: ${entry.hours}` : null,
     entry.location ? `場所: ${entry.location}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function matchByName<T extends { name?: string | null }>(entries: T[], body: string) {

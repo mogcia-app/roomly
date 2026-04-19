@@ -82,6 +82,7 @@ type GuestQaSheetProps = {
   localizedGuideLabels?: Record<string, string>;
   open: boolean;
   onClose: () => void;
+  onThreadResolved: (threadId: string | null, mode: "ai" | "human") => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
 };
 
@@ -1884,6 +1885,7 @@ function GuestQaSheet({
   localizedGuideLabels,
   open,
   onClose,
+  onThreadResolved,
   onMessagesAppend,
 }: GuestQaSheetProps) {
   const ui = getGuestUiCopy(language);
@@ -1920,7 +1922,12 @@ function GuestQaSheet({
         return;
       }
 
-      const response = await rawResponse.json() as { messages?: GuestMessage[] };
+      const response = await rawResponse.json() as {
+        threadId?: string | null;
+        mode?: "ai" | "human";
+        messages?: GuestMessage[];
+      };
+      onThreadResolved(response.threadId ?? null, response.mode ?? "ai");
       onMessagesAppend(
         (response.messages ?? []).map((message) => ({ ...message, optimistic: false })),
       );
@@ -2535,6 +2542,10 @@ export function GuestChatExperience({
         open={isQaOpen}
         onClose={() => {
           setIsQaOpen(false);
+        }}
+        onThreadResolved={(threadId, mode) => {
+          setCurrentThreadId(threadId);
+          setActiveMode(mode);
         }}
         onMessagesAppend={appendMessages}
       />

@@ -68,6 +68,7 @@ type GuestChatComposerProps = {
   richMenu: GuestRichMenu | null;
   onModeChange: (mode: "ai" | "human") => void;
   onThreadResolved: (threadId: string | null, mode: "ai" | "human") => void;
+  onMessagesReset: (messages: DisplayMessage[]) => void;
   onMessagesReplace: (messageId: string, messages: DisplayMessage[]) => void;
   onMessagesAppend: (messages: DisplayMessage[]) => void;
   onOptimisticRemove: (messageId: string) => void;
@@ -1349,6 +1350,7 @@ function GuestChatInput({
   richMenu,
   onModeChange,
   onThreadResolved,
+  onMessagesReset,
   onMessagesReplace,
   onMessagesAppend,
   onOptimisticRemove,
@@ -1753,7 +1755,7 @@ function GuestChatInput({
             response.messages.map((message) => ({ ...message, optimistic: false })),
           );
         } else {
-          onMessagesAppend(response.messages.map((message) => ({ ...message, optimistic: false })));
+          onMessagesReset(response.messages.map((message) => ({ ...message, optimistic: false })));
         }
         return;
       }
@@ -2301,6 +2303,10 @@ export function GuestChatExperience({
     ]);
   };
 
+  const resetMessages = (newMessages: DisplayMessage[]) => {
+    setChatMessages(newMessages);
+  };
+
   const submitConfirmationReply = async (body: string) => {
     if (isQuickReplySubmitting) {
       return;
@@ -2574,6 +2580,7 @@ export function GuestChatExperience({
             }));
           }
         }}
+        onMessagesReset={resetMessages}
         onMessagesReplace={replaceOptimisticMessage}
         onMessagesAppend={appendMessages}
         onOptimisticRemove={removeOptimisticMessage}

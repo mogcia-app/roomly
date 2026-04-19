@@ -909,12 +909,47 @@ function areMessagesEquivalent(left: DisplayMessage[], right: DisplayMessage[]) 
   });
 }
 
+function isTransientMessage(message: DisplayMessage) {
+  return (
+    message.optimistic ||
+    message.id.startsWith("runtime-") ||
+    message.id.startsWith("optimistic-") ||
+    message.id.startsWith("quick-reply-") ||
+    message.id.startsWith("handoff-category-") ||
+    message.id.startsWith("rich-ai-message-")
+  );
+}
+
+function areLogicallyEquivalentMessages(left: DisplayMessage, right: DisplayMessage) {
+  if (
+    left.sender !== right.sender ||
+    (left.body ?? "") !== (right.body ?? "") ||
+    (left.imageUrl ?? null) !== (right.imageUrl ?? null) ||
+    (left.imageAlt ?? null) !== (right.imageAlt ?? null) ||
+    Boolean(left.handoffConfirmation) !== Boolean(right.handoffConfirmation)
+  ) {
+    return false;
+  }
+
+  const leftTime = left.timestamp ? Date.parse(left.timestamp) : Number.NaN;
+  const rightTime = right.timestamp ? Date.parse(right.timestamp) : Number.NaN;
+
+  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) {
+    return isTransientMessage(left) || isTransientMessage(right);
+  }
+
+  return Math.abs(leftTime - rightTime) <= 90_000;
+}
+
 function mergeDisplayMessages(left: DisplayMessage[], right: DisplayMessage[]) {
   const merged = [...left];
   const seenIds = new Set(left.map((message) => message.id));
 
   for (const message of right) {
-    if (seenIds.has(message.id)) {
+    if (
+      seenIds.has(message.id) ||
+      merged.some((existing) => areLogicallyEquivalentMessages(existing, message))
+    ) {
       continue;
     }
 

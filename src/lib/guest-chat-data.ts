@@ -1242,6 +1242,75 @@ async function getMessagesByThreadId(threadId: string) {
     .filter((value): value is GuestMessage => value !== null);
 }
 
+function areLogicallyEquivalentGuestMessages(left: GuestMessage, right: GuestMessage) {
+  if (
+    left.sender !== right.sender ||
+    (left.body ?? "") !== (right.body ?? "") ||
+    (left.imageUrl ?? null) !== (right.imageUrl ?? null) ||
+    (left.imageAlt ?? null) !== (right.imageAlt ?? null) ||
+    Boolean(left.handoffConfirmation) !== Boolean(right.handoffConfirmation)
+  ) {
+    return false;
+  }
+
+  const leftTime = left.timestamp ? Date.parse(left.timestamp) : Number.NaN;
+  const rightTime = right.timestamp ? Date.parse(right.timestamp) : Number.NaN;
+
+  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) {
+    return false;
+  }
+
+  return Math.abs(leftTime - rightTime) <= 90_000;
+}
+
+function mergeGuestMessages(left: GuestMessage[], right: GuestMessage[]) {
+  const merged = [...left];
+  const seenIds = new Set(left.map((message) => message.id));
+
+  for (const message of right) {
+    if (
+      seenIds.has(message.id) ||
+      merged.some((existing) => areLogicallyEquivalentGuestMessages(existing, message))
+    ) {
+      continue;
+    }
+
+    merged.push(message);
+    seenIds.add(message.id);
+  }
+
+  return merged.sort((first, second) => {
+    const firstTime = first.timestamp ? Date.parse(first.timestamp) : 0;
+    const secondTime = second.timestamp ? Date.parse(second.timestamp) : 0;
+
+    return firstTime - secondTime;
+  });
+}
+
+async function getConversationMessages(
+  stayStatus: GuestStayStatus,
+  resolvedMode: ThreadMode,
+  resolvedThreadId: string,
+) {
+  const [activeMessages, aiThread, humanThread] = await Promise.all([
+    getMessagesByThreadId(resolvedThreadId),
+    findThread(stayStatus, "ai"),
+    findThread(stayStatus, "human"),
+  ]);
+
+  const companionThreadId =
+    resolvedMode === "human"
+      ? aiThread?.id ?? null
+      : humanThread?.id ?? null;
+
+  if (!companionThreadId || companionThreadId === resolvedThreadId) {
+    return activeMessages;
+  }
+
+  const companionMessages = await getMessagesByThreadId(companionThreadId);
+  return mergeGuestMessages(activeMessages, companionMessages);
+}
+
 function getLocalizedServerCopy(language: GuestLanguage) {
   if (language === "en") {
     return {
@@ -2346,7 +2415,7 @@ export async function getGuestThreadStateFromStore(
 
     const threadSnapshot = await getAdminDb().collection("chat_threads").doc(resolvedThreadId).get();
     const threadData = threadSnapshot.data() as FirestoreChatThread | undefined;
-    const messages = await getMessagesByThreadId(resolvedThreadId);
+    const messages = await getConversationMessages(stayStatus, resolvedMode, resolvedThreadId);
 
     return {
       threadId: resolvedThreadId,

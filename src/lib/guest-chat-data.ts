@@ -1714,54 +1714,54 @@ function scoreKnowledgeMatch(question: string, candidate: string) {
 }
 
 function formatWifiEntry(entry: StructuredKnowledge["wifi"][number]) {
-  return compactParts([
-    entry.floor ? `${entry.floor}` : null,
+  return compactLines([
+    entry.floor ? `フロア: ${entry.floor}` : null,
     entry.ssid ? `SSID: ${entry.ssid}` : null,
     entry.password ? `PASS: ${entry.password}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatBreakfastEntry(entry: StructuredKnowledge["breakfast"][number]) {
-  return compactParts([
-    entry.style,
+  return compactLines([
+    entry.style ? `朝食: ${entry.style}` : "朝食",
     entry.hours ? `営業時間: ${entry.hours}` : null,
     entry.location ? `場所: ${entry.location}` : null,
     entry.price ? `料金: ${entry.price}` : null,
     formatBoolean(entry.reservationRequired, "予約: 必要", "予約: 不要"),
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatBathEntry(entry: StructuredKnowledge["baths"][number]) {
-  return compactParts([
-    entry.name,
+  return compactLines([
+    entry.name ?? "大浴場",
     entry.hours ? `営業時間: ${entry.hours}` : null,
     entry.location ? `場所: ${entry.location}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatFacilityEntry(entry: StructuredKnowledge["facilities"][number]) {
-  return compactParts([
-    entry.name,
+  return compactLines([
+    entry.name ?? "館内施設",
     entry.hours ? `営業時間: ${entry.hours}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatFacilityLocationEntry(entry: StructuredKnowledge["facilityLocations"][number]) {
-  return compactParts([
-    entry.name,
+  return compactLines([
+    entry.name ?? "施設案内",
     entry.floor ? `場所: ${entry.floor}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatAmenityEntry(entry: StructuredKnowledge["amenities"][number]) {
-  return compactParts([
-    entry.name,
-    formatBoolean(entry.inRoom, "客室内にあります", "客室内にはありません"),
+  return compactLines([
+    entry.name ?? "アメニティ",
+    formatBoolean(entry.inRoom, "客室内: あり", "客室内: なし"),
     formatBoolean(
       entry.availableOnRequest,
       "追加対応: 可能",
@@ -1770,28 +1770,28 @@ function formatAmenityEntry(entry: StructuredKnowledge["amenities"][number]) {
     entry.requestMethod ? `依頼方法: ${entry.requestMethod}` : null,
     entry.price ? `料金: ${entry.price}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatParkingEntry(entry: StructuredKnowledge["parking"][number]) {
-  return compactParts([
-    entry.name,
+  return compactLines([
+    entry.name ?? "駐車場",
     entry.location ? `場所: ${entry.location}` : null,
     entry.capacity ? `台数: ${entry.capacity}` : null,
     entry.price ? `料金: ${entry.price}` : null,
     entry.hours ? `利用時間: ${entry.hours}` : null,
     formatBoolean(entry.reservationRequired, "予約: 必要", "予約: 不要"),
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatEmergencyEntry(entry: StructuredKnowledge["emergency"][number]) {
-  return compactParts([
-    entry.category,
+  return compactLines([
+    entry.category ?? "緊急案内",
     entry.contact ? `連絡先: ${entry.contact}` : null,
     entry.steps ? `手順: ${entry.steps}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatCheckoutEntry(entry: StructuredKnowledge["checkout"][number]) {
@@ -1806,13 +1806,13 @@ function formatCheckoutEntry(entry: StructuredKnowledge["checkout"][number]) {
 }
 
 function formatRoomServiceEntry(entry: StructuredKnowledge["roomService"][number]) {
-  return compactParts([
-    entry.menuName,
+  return compactLines([
+    entry.menuName ?? "ルームサービス",
     entry.price ? `料金: ${entry.price}` : null,
     entry.orderMethod ? `注文方法: ${entry.orderMethod}` : null,
     entry.hours ? `対応時間: ${entry.hours}` : null,
     entry.note,
-  ]).join(" / ");
+  ]);
 }
 
 function formatTransportEntry(entry: StructuredKnowledge["transport"][number]) {

@@ -1349,10 +1349,18 @@ function GuestChatInput({
   const [isRichMenuOpen, setIsRichMenuOpen] = useState(false);
   const submitLockRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const viewportBaseHeightRef = useRef(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [isPending, startTransition] = useTransition();
   const isBusy = isPending || isSubmitting;
+  const isIosSafari =
+    typeof window !== "undefined" &&
+    /iP(hone|ad|od)/.test(window.navigator.userAgent) &&
+    /Safari/.test(window.navigator.userAgent) &&
+    !/CriOS|FxiOS|EdgiOS/.test(window.navigator.userAgent);
+  const safariAccessoryInset = isIosSafari && isComposerFocused && keyboardInset > 0 ? 52 : 0;
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -1362,6 +1370,7 @@ function GuestChatInput({
     }
 
     const handleFocus = () => {
+      setIsComposerFocused(true);
       window.setTimeout(() => {
         textarea.scrollIntoView({
           block: "nearest",
@@ -1370,10 +1379,16 @@ function GuestChatInput({
       }, 120);
     };
 
+    const handleBlur = () => {
+      setIsComposerFocused(false);
+    };
+
     textarea.addEventListener("focus", handleFocus);
+    textarea.addEventListener("blur", handleBlur);
 
     return () => {
       textarea.removeEventListener("focus", handleFocus);
+      textarea.removeEventListener("blur", handleBlur);
     };
   }, []);
 
@@ -1383,12 +1398,20 @@ function GuestChatInput({
     }
 
     const viewport = window.visualViewport;
+    viewportBaseHeightRef.current = Math.max(window.innerHeight, viewport.height);
 
     const updateKeyboardInset = () => {
+      const baseHeight = viewportBaseHeightRef.current || Math.max(window.innerHeight, viewport.height);
+      const viewportLoss = baseHeight - viewport.height - viewport.offsetTop;
       const nextInset = Math.max(
         0,
-        window.innerHeight - viewport.height - viewport.offsetTop,
+        viewportLoss,
       );
+
+      if (!isComposerFocused && nextInset === 0) {
+        viewportBaseHeightRef.current = Math.max(window.innerHeight, viewport.height);
+      }
+
       setKeyboardInset(nextInset);
     };
 
@@ -1403,7 +1426,7 @@ function GuestChatInput({
       viewport.removeEventListener("scroll", updateKeyboardInset);
       window.removeEventListener("orientationchange", updateKeyboardInset);
     };
-  }, []);
+  }, [isComposerFocused]);
 
   async function postGuestMessage(body: string, nextMode: "ai" | "human") {
     const response = await fetch(`/api/guest/rooms/${roomId}/messages`, {
@@ -1807,7 +1830,8 @@ function GuestChatInput({
       <div
         className="border-t border-[#e7ddd8] bg-white"
         style={{
-          paddingBottom: `calc(max(env(safe-area-inset-bottom), 0px) + ${keyboardInset}px)`,
+          paddingBottom:
+            `calc(max(env(safe-area-inset-bottom), 0px) + ${keyboardInset + safariAccessoryInset}px)`,
         }}
       >
         <div className="flex items-end gap-2 px-3 pb-2 pt-2 lg:px-8">

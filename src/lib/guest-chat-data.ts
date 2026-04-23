@@ -2219,6 +2219,7 @@ function buildAiReply(stayStatus: GuestStayStatus, body: string) {
 
   const isEmergency =
     includesAny(normalized, ["fire", "ambulance", "accident", "emergency"]) ||
+    body.includes("緊急") ||
     body.includes("火事") ||
     body.includes("救急") ||
     body.includes("事故") ||

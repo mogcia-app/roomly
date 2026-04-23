@@ -70,6 +70,17 @@ type InteractionState =
   | "language"
   | null;
 
+function areThreadMetaEquivalent(
+  left: GuestChatExperienceProps["initialThreadMeta"],
+  right: GuestChatExperienceProps["initialThreadMeta"],
+) {
+  return (
+    left.handoffStatus === right.handoffStatus &&
+    left.unreadCountGuest === right.unreadCountGuest &&
+    left.unreadCountFront === right.unreadCountFront
+  );
+}
+
 type GuestChatComposerProps = {
   roomId: string;
   language: GuestLanguage;
@@ -2491,7 +2502,10 @@ function GuestQaSheet({
 }: GuestQaSheetProps) {
   const ui = getGuestUiCopy(language);
   const actionCopy = getGuestActionCopy(language);
-  const aiGuideOptions = buildAiGuideOptions(language, knowledge, prompts, localizedGuideLabels);
+  const aiGuideOptions = useMemo(
+    () => buildAiGuideOptions(language, knowledge, prompts, localizedGuideLabels),
+    [knowledge, language, localizedGuideLabels, prompts],
+  );
   const [error, setError] = useState<string | null>(null);
   const submitLockRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -2735,27 +2749,52 @@ export function GuestChatExperience({
         return;
       }
 
-      setActiveMode(payload.mode ?? requestedMode);
-      setCurrentThreadId(payload.threadId ?? null);
-      setThreadMeta({
+      const nextMode = payload.mode ?? requestedMode;
+      const nextThreadId = payload.threadId ?? null;
+      const nextThreadMeta = {
         handoffStatus: payload.meta?.handoffStatus ?? null,
         unreadCountGuest:
           typeof payload.meta?.unreadCountGuest === "number" ? payload.meta.unreadCountGuest : null,
         unreadCountFront:
           typeof payload.meta?.unreadCountFront === "number" ? payload.meta.unreadCountFront : null,
-      });
+      };
+      const persistedMessages = chatMessages
+        .filter((message) => !message.optimistic);
+      const mergedMessages = mergeDisplayMessages(persistedMessages, fetchedMessages);
+      const messagesChanged = !areMessagesEquivalent(persistedMessages, mergedMessages);
+      const modeChanged = activeModeRef.current !== nextMode;
+      const threadChanged = currentThreadIdRef.current !== nextThreadId;
+      const metaChanged = !areThreadMetaEquivalent(threadMeta, nextThreadMeta);
 
-      setChatMessages((current) => {
-        const optimisticMessages = current.filter((message) => message.optimistic);
-        const persistedMessages = current.filter((message) => !message.optimistic);
-        const mergedMessages = mergeDisplayMessages(persistedMessages, fetchedMessages);
+      if (!messagesChanged && !modeChanged && !threadChanged && !metaChanged) {
+        return;
+      }
 
-        if (areMessagesEquivalent(persistedMessages, mergedMessages)) {
-          return current;
-        }
+      if (modeChanged) {
+        setActiveMode(nextMode);
+      }
 
-        return mergeDisplayMessages(mergedMessages, optimisticMessages);
-      });
+      if (threadChanged) {
+        setCurrentThreadId(nextThreadId);
+      }
+
+      if (metaChanged) {
+        setThreadMeta(nextThreadMeta);
+      }
+
+      if (messagesChanged) {
+        setChatMessages((current) => {
+          const optimisticMessages = current.filter((message) => message.optimistic);
+          const currentPersistedMessages = current.filter((message) => !message.optimistic);
+          const nextMergedMessages = mergeDisplayMessages(currentPersistedMessages, fetchedMessages);
+
+          if (areMessagesEquivalent(currentPersistedMessages, nextMergedMessages)) {
+            return current;
+          }
+
+          return mergeDisplayMessages(nextMergedMessages, optimisticMessages);
+        });
+      }
     } catch {
       return;
     }
@@ -2763,8 +2802,12 @@ export function GuestChatExperience({
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
       void refreshMessages();
-    }, 5000);
+    }, 12000);
 
     return () => {
       window.clearInterval(intervalId);

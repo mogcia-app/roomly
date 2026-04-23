@@ -1233,18 +1233,18 @@ function getQaHelperText(language: GuestLanguage) {
 
 function getEmergencyLabel(language: GuestLanguage) {
   if (language === "en") {
-    return "Emergency";
+    return "Emergency contact";
   }
   if (language === "zh-CN") {
-    return "紧急";
+    return "紧急联系";
   }
   if (language === "zh-TW") {
-    return "緊急";
+    return "緊急聯絡";
   }
   if (language === "ko") {
-    return "긴급";
+    return "긴급 연락";
   }
-  return "緊急";
+  return "緊急連絡";
 }
 
 function getEmergencyModalCopy(language: GuestLanguage) {
@@ -1701,7 +1701,7 @@ function getAiGuideLabel(language: GuestLanguage, key: AiGuideOption["key"]) {
     amenity: { ja: "アメニティ", en: "Amenities", "zh-CN": "备品", "zh-TW": "備品", ko: "어메니티" },
     parking: { ja: "駐車場", en: "Parking", "zh-CN": "停车场", "zh-TW": "停車場", ko: "주차장" },
     checkout: { ja: "チェックアウト", en: "Checkout", "zh-CN": "退房", "zh-TW": "退房資訊", ko: "체크아웃" },
-    emergency: { ja: "緊急時", en: "Emergency", "zh-CN": "紧急情况", "zh-TW": "緊急情況", ko: "긴급" },
+    emergency: { ja: "緊急時の案内", en: "Emergency info", "zh-CN": "紧急情况说明", "zh-TW": "緊急情況說明", ko: "긴급 안내" },
     roomService: { ja: "ルームサービス", en: "Room service", "zh-CN": "客房服务", "zh-TW": "客房服務", ko: "룸서비스" },
     transport: { ja: "交通案内", en: "Transport", "zh-CN": "交通", "zh-TW": "交通資訊", ko: "교통" },
     nearby: { ja: "周辺案内", en: "Nearby spots", "zh-CN": "周边信息", "zh-TW": "周邊資訊", ko: "주변 안내" },

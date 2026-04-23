@@ -620,6 +620,14 @@ function GuideDetailSheet({
       <div className="relative flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-[#eadfd8] bg-[#fffaf7] shadow-[0_-18px_48px_rgba(72,47,35,0.18)] lg:max-w-none">
         <div className="sticky top-0 z-10 border-b border-[#efe4dd] bg-[#fffaf7] px-4 pb-4 pt-4 lg:px-8">
           <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#e2d4cc]" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#e4d8d1] bg-white px-3 py-1.5 text-[12px] font-light text-[#6f564b]"
+          >
+            <span aria-hidden="true">←</span>
+            <span>戻る</span>
+          </button>
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-[18px] font-medium text-[#251815]">{detail.title}</div>

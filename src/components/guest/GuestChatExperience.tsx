@@ -311,6 +311,27 @@ function parseGuideCards(body: string): GuideCard[] | null {
   return structuredSegmentCount >= 2 && validCards.length > 0 ? validCards : null;
 }
 
+function buildFallbackGuideCards(body: string): GuideCard[] | null {
+  const normalizedBody = formatMessageBody(body);
+  const lines = normalizedBody
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const title = lines[0];
+  const notes = lines.slice(1);
+
+  return [{
+    title,
+    fields: [],
+    notes: notes.length > 0 ? notes : undefined,
+  }];
+}
+
 function normalizeGuideLookupKey(value: string) {
   return value
     .normalize("NFKC")
@@ -518,7 +539,9 @@ function renderMessageBody(
   knowledge?: HearingSheetKnowledge | null,
   onGuideDetailOpen?: (detail: GuideDetail) => void,
 ) {
-  const guideCards = message.body ? parseGuideCards(message.body) : null;
+  const guideCards = message.body
+    ? parseGuideCards(message.body) ?? (message.guideResponse ? buildFallbackGuideCards(message.body) : null)
+    : null;
 
   return (
     <div className="space-y-3">

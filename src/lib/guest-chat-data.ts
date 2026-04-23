@@ -89,6 +89,8 @@ type FirestoreMessage = {
   translated_body_guest?: string | null;
   translated_language_guest?: string | null;
   translation_state?: GuestTranslationState;
+  guide_response?: boolean;
+  guideResponse?: boolean;
   handoff_confirmation?: boolean;
   read_at_guest?: { toDate?: () => Date } | string | null;
   readAtGuest?: { toDate?: () => Date } | string | null;
@@ -518,6 +520,7 @@ function normalizeMessage(
     id,
     sender: message.sender,
     body: guestVisibleBody,
+    guideResponse: message.guide_response === true || message.guideResponse === true,
     imageUrl: message.image_url ?? null,
     imageAlt: message.image_alt ?? null,
     timestamp,
@@ -538,6 +541,7 @@ function buildRuntimeMessage(
   sender: NonNullable<FirestoreMessage["sender"]>,
   payload: TranslationPayload,
   options?: {
+    guideResponse?: boolean;
     handoffConfirmation?: boolean;
   },
 ): GuestMessage {
@@ -545,6 +549,7 @@ function buildRuntimeMessage(
     id: `runtime-${sender}-${Math.random().toString(36).slice(2, 10)}`,
     sender,
     body: payload.body,
+    guideResponse: options?.guideResponse === true,
     imageUrl: payload.imageUrl ?? null,
     imageAlt: payload.imageAlt ?? null,
     timestamp: new Date().toISOString(),
@@ -567,6 +572,7 @@ async function addMessage(
   sender: FirestoreMessage["sender"],
   payload: TranslationPayload,
   options?: {
+    guideResponse?: boolean;
     handoffConfirmation?: boolean;
   },
 ) {
@@ -585,6 +591,7 @@ async function addMessage(
     translated_body_guest: payload.translatedBodyGuest,
     translated_language_guest: payload.translatedLanguageGuest,
     translation_state: payload.translationState,
+    guide_response: options?.guideResponse === true,
     handoff_confirmation: options?.handoffConfirmation === true,
     timestamp: FieldValue.serverTimestamp(),
   } satisfies FirestoreMessage & { timestamp: unknown });
@@ -3244,6 +3251,7 @@ export async function postGuestAiStarterToStore(
     "ai",
     aiPayload,
     {
+      guideResponse: true,
       handoffConfirmation: aiReply.needsHandoffConfirmation,
     },
   );
@@ -3259,6 +3267,7 @@ export async function postGuestAiStarterToStore(
     messages: [
       buildRuntimeMessage("guest", guestPayload),
       buildRuntimeMessage("ai", aiPayload, {
+        guideResponse: true,
         handoffConfirmation: aiReply.needsHandoffConfirmation,
       }),
     ],

@@ -6,6 +6,7 @@ export type GuestMessage = {
   id: string;
   sender: "guest" | "ai" | "front" | "system";
   body: string;
+  guideResponse?: boolean;
   imageUrl?: string | null;
   imageAlt?: string | null;
   timestamp: string | null;

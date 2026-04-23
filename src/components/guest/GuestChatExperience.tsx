@@ -372,6 +372,27 @@ function buildGuideDetail(
 
   const titleKey = normalizeGuideLookupKey(card.title);
 
+  const wifi = knowledge.wifi.find((entry) =>
+    titleKey.includes("wifi") ||
+    titleKey.includes("wi-fi") ||
+    titleKey.includes("無線lan") ||
+    titleKey.includes("ssid") ||
+    matchesGuideLookupKey(entry.floor, titleKey) ||
+    matchesGuideLookupKey(entry.ssid, titleKey),
+  );
+
+  if (wifi) {
+    return {
+      title: card.title || "Wi-Fi",
+      fields: [
+        ...(wifi.floor ? [{ label: "フロア", value: wifi.floor }] : []),
+        ...(wifi.ssid ? [{ label: "SSID", value: wifi.ssid }] : []),
+        ...(wifi.password ? [{ label: "PASS", value: wifi.password }] : []),
+      ],
+      notes: wifi.notes?.length ? wifi.notes : wifi.note ? [wifi.note] : [],
+    };
+  }
+
   const facilityLocation = knowledge.facilityLocations.find((entry) =>
     matchesGuideLookupKey(entry.name, titleKey),
   );

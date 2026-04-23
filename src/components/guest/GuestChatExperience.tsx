@@ -571,15 +571,13 @@ function renderMessageBody(
                     detail ? "cursor-pointer transition-colors hover:bg-[#f8f1eb]" : "cursor-default"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3 border-b border-[#efe4dd] pb-2">
-                    <div>
-                      <div className="text-[14px] font-medium text-[#33231e]">{card.title}</div>
-                      {card.subtitle ? (
-                        <div className="mt-0.5 text-[12px] text-[#8b776e]">{card.subtitle}</div>
-                      ) : null}
-                    </div>
+                  <div className="border-b border-[#efe4dd] pb-2">
+                    <div className="text-[14px] font-medium text-[#33231e]">{card.title}</div>
+                    {card.subtitle ? (
+                      <div className="mt-0.5 text-[12px] text-[#8b776e]">{card.subtitle}</div>
+                    ) : null}
                     {detail ? (
-                      <div className="shrink-0 text-right">
+                      <div className="mt-2">
                         <div className="inline-flex items-center gap-1 rounded-full border border-[#e4d8d1] bg-white px-2.5 py-1 text-[10px] font-light tracking-[0.01em] text-[#8b776e]">
                           <span>{getGuideDetailHint(language)}</span>
                           <span aria-hidden="true" className="text-[12px] leading-none text-[#b48a79]">›</span>

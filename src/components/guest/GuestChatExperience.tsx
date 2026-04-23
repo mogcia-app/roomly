@@ -10,7 +10,6 @@ import {
 } from "@/lib/guest-contract";
 import {
   getGuestUiCopy,
-  hasGuestAiGuideContent,
   type HearingSheetKnowledge,
   type GuestLanguage,
   type GuestMessage,
@@ -2597,31 +2596,6 @@ function GuestQaSheet({
   );
 }
 
-function getFrontStarterBody(language: GuestLanguage, directContactOnly = false) {
-  const ui = getGuestUiCopy(language);
-
-  return directContactOnly ? ui.directContactMessage : ui.humanStarterMessage;
-}
-
-function createFrontStarterMessage(
-  language: GuestLanguage,
-  directContactOnly: boolean,
-  messages: DisplayMessage[],
-): DisplayMessage {
-  const firstTimestamp = messages.find((message) => message.timestamp)?.timestamp ?? null;
-  const parsedFirstTimestamp = firstTimestamp ? Date.parse(firstTimestamp) : Number.NaN;
-
-  return {
-    id: "front-starter",
-    sender: "front",
-    body: getFrontStarterBody(language, directContactOnly),
-    timestamp:
-      firstTimestamp && !Number.isNaN(parsedFirstTimestamp)
-        ? new Date(parsedFirstTimestamp - 1).toISOString()
-        : firstTimestamp,
-  };
-}
-
 export function GuestChatExperience({
   debugInfo,
   roomId,
@@ -2640,7 +2614,6 @@ export function GuestChatExperience({
 }: GuestChatExperienceProps) {
   const ui = getGuestUiCopy(language);
   const router = useRouter();
-  const hasAiGuideContent = hasGuestAiGuideContent(knowledge, prompts);
   const [activeMode, setActiveMode] = useState<"ai" | "human">(initialMode);
   const [chatMessages, setChatMessages] = useState<DisplayMessage[]>(initialMessages);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(initialThreadId);
@@ -2657,8 +2630,6 @@ export function GuestChatExperience({
     setChatMessages((current) => current.filter((message) => message.id !== messageId));
   };
   const messages = chatMessages;
-  const hasGuestMessage = messages.some((message) => message.sender === "guest");
-  const hasFrontMessage = messages.some((message) => message.sender === "front");
   const activeHandoffConfirmationMessageId = useMemo(
     () => findActiveHandoffConfirmationMessageId(messages),
     [messages],
@@ -2666,17 +2637,7 @@ export function GuestChatExperience({
   const handoffStatus = threadMeta.handoffStatus ?? null;
   const unreadGuestReplies = threadMeta.unreadCountGuest ?? 0;
   const showHandoffBanner = handoffStatus === "requested" || handoffStatus === "accepted";
-  const shouldInjectFrontStarter = !hasGuestMessage && !hasFrontMessage;
-  const visibleMessages = useMemo(() => {
-    if (!shouldInjectFrontStarter) {
-      return messages;
-    }
-
-    return [
-      createFrontStarterMessage(language, !hasAiGuideContent || showHandoffBanner, messages),
-      ...messages,
-    ];
-  }, [hasAiGuideContent, language, messages, shouldInjectFrontStarter, showHandoffBanner]);
+  const visibleMessages = messages;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

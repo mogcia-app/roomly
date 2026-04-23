@@ -12,7 +12,9 @@ import {
   type GuestTranslationState,
 } from "@/lib/guest-contract";
 import {
+  getGuestUiCopy,
   getGuestThread,
+  hasGuestAiGuideContent,
   type GuestLanguage,
   type GuestMessage,
   type GuestStayStatus,
@@ -58,6 +60,8 @@ type FirestoreChatThread = {
   unreadCountFront?: unknown;
   unread_count_guest?: unknown;
   unreadCountGuest?: unknown;
+  guest_starter_message_sent_at?: unknown;
+  guestStarterMessageSentAt?: unknown;
   created_at?: unknown;
   updated_at?: unknown;
 };
@@ -1311,6 +1315,109 @@ async function getConversationMessages(
   return mergeGuestMessages(activeMessages, companionMessages);
 }
 
+function resolveFrontStarterBody(
+  stayStatus: GuestStayStatus,
+  guestLanguage: GuestLanguage,
+  mode: ThreadMode,
+  thread: FirestoreChatThread | undefined,
+) {
+  const ui = getGuestUiCopy(guestLanguage);
+  const handoffStatus =
+    thread?.handoff_status === "requested" ||
+    thread?.handoff_status === "accepted" ||
+    thread?.handoffStatus === "requested" ||
+    thread?.handoffStatus === "accepted";
+  const directContactOnly =
+    mode === "human" ||
+    handoffStatus ||
+    !hasGuestAiGuideContent(stayStatus.hearingSheetKnowledge, stayStatus.hearingSheetPrompts);
+
+  return directContactOnly ? ui.directContactMessage : ui.humanStarterMessage;
+}
+
+async function ensureFrontStarterMessage(
+  stayStatus: GuestStayStatus,
+  mode: ThreadMode,
+  threadId: string,
+  thread: FirestoreChatThread | undefined,
+  messages: GuestMessage[],
+) {
+  const alreadyHasStarterContext = messages.some(
+    (message) => message.sender === "front" || message.sender === "guest",
+  );
+  const starterSentAt = thread?.guest_starter_message_sent_at ?? thread?.guestStarterMessageSentAt;
+
+  if (alreadyHasStarterContext || starterSentAt) {
+    return messages;
+  }
+
+  const guestLanguage = resolveThreadGuestLanguage(thread, stayStatus);
+  const body = resolveFrontStarterBody(stayStatus, guestLanguage, mode, thread);
+  const payload = await buildTranslationPayload({
+    displayBody: body,
+    originalLanguage: GUEST_FRONT_DESK_LANGUAGE,
+    displayLanguage: toLanguageCode(guestLanguage),
+    guestLanguage,
+    frontLanguage: GUEST_FRONT_DESK_LANGUAGE,
+  });
+  const db = getAdminDb();
+  const threadRef = db.collection("chat_threads").doc(threadId);
+  const messageRef = db.collection("messages").doc();
+  let wroteStarter = false;
+
+  await db.runTransaction(async (transaction) => {
+    const threadSnapshot = await transaction.get(threadRef);
+    const latestThread = threadSnapshot.data() as FirestoreChatThread | undefined;
+    const latestStarterSentAt =
+      latestThread?.guest_starter_message_sent_at ?? latestThread?.guestStarterMessageSentAt;
+
+    if (latestStarterSentAt) {
+      return;
+    }
+
+    transaction.set(
+      messageRef,
+      {
+        thread_id: threadId,
+        stay_id: stayStatus.stayId ?? stayStatus.roomId,
+        room_id: stayStatus.roomId,
+        sender: "front" as const,
+        body: payload.body,
+        image_url: payload.imageUrl ?? null,
+        image_alt: payload.imageAlt ?? null,
+        original_body: payload.originalBody,
+        original_language: payload.originalLanguage,
+        translated_body_front: payload.translatedBodyFront,
+        translated_language_front: payload.translatedLanguageFront,
+        translated_body_guest: payload.translatedBodyGuest,
+        translated_language_guest: payload.translatedLanguageGuest,
+        translation_state: payload.translationState,
+        handoff_confirmation: false,
+        timestamp: FieldValue.serverTimestamp(),
+      } satisfies FirestoreMessage & { timestamp: unknown },
+    );
+    transaction.set(
+      threadRef,
+      {
+        guest_starter_message_sent_at: FieldValue.serverTimestamp(),
+        guestStarterMessageSentAt: FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
+      } satisfies Pick<
+        FirestoreChatThread,
+        "guest_starter_message_sent_at" | "guestStarterMessageSentAt" | "updated_at"
+      > & { updated_at: unknown },
+      { merge: true },
+    );
+    wroteStarter = true;
+  });
+
+  if (!wroteStarter) {
+    return messages;
+  }
+
+  return getConversationMessages(stayStatus, mode, threadId);
+}
+
 function getLocalizedServerCopy(language: GuestLanguage) {
   if (language === "en") {
     return {
@@ -2416,11 +2523,18 @@ export async function getGuestThreadStateFromStore(
     const threadSnapshot = await getAdminDb().collection("chat_threads").doc(resolvedThreadId).get();
     const threadData = threadSnapshot.data() as FirestoreChatThread | undefined;
     const messages = await getConversationMessages(stayStatus, resolvedMode, resolvedThreadId);
+    const hydratedMessages = await ensureFrontStarterMessage(
+      stayStatus,
+      resolvedMode,
+      resolvedThreadId,
+      threadData,
+      messages,
+    );
 
     return {
       threadId: resolvedThreadId,
       mode: resolvedMode,
-      messages: messages.length > 0 ? messages : fallbackMessages,
+      messages: hydratedMessages.length > 0 ? hydratedMessages : fallbackMessages,
       meta: resolveThreadStateMeta(threadData),
     };
   } catch (error) {

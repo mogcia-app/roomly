@@ -618,36 +618,54 @@ function GuideDetailSheet({
           }
         }}
       />
-      <div className="relative w-full max-w-md rounded-t-[28px] border border-[#eadfd8] bg-[#fffaf7] px-4 pb-6 pt-4 shadow-[0_-18px_48px_rgba(72,47,35,0.18)] lg:max-w-none lg:px-8">
-        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#e2d4cc]" />
-        <div className="flex items-start justify-between gap-4">
-          <div className="text-[18px] font-medium text-[#251815]">{detail.title}</div>
+      <div className="relative flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-[#eadfd8] bg-[#fffaf7] shadow-[0_-18px_48px_rgba(72,47,35,0.18)] lg:max-w-none">
+        <div className="sticky top-0 z-10 border-b border-[#efe4dd] bg-[#fffaf7] px-4 pb-4 pt-4 lg:px-8">
+          <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#e2d4cc]" />
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[18px] font-medium text-[#251815]">{detail.title}</div>
+              <div className="mt-1 text-[12px] leading-5 text-[#8b776e]">
+                上下にスクロールして詳細を確認できます
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#7a6056]"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-8">
+          <div className="space-y-3">
+            {detail.fields.map((field) => (
+              <div
+                key={`${detail.title}-${field.label}`}
+                className="grid grid-cols-[88px_1fr] gap-3 rounded-[16px] border border-[#eadfd8] bg-white px-4 py-3 text-[14px] leading-6"
+              >
+                <div className="text-[#8b776e]">{field.label}</div>
+                <div className="text-[#33231e]">{field.value}</div>
+              </div>
+            ))}
+            {detail.notes.map((note) => (
+              <div
+                key={`${detail.title}-${note}`}
+                className="rounded-[16px] border border-[#eadfd8] bg-white px-4 py-3 text-[14px] leading-6 text-[#5f463d] whitespace-pre-line"
+              >
+                {note}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="border-t border-[#efe4dd] bg-[#fffaf7] px-4 py-3 lg:px-8">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e4d8d1] bg-white text-[#7a6056]"
+            className="w-full rounded-[16px] border border-[#dcc7bf] bg-white px-4 py-3 text-[14px] font-light text-[#6f564b]"
           >
-            ×
+            閉じる
           </button>
-        </div>
-        <div className="mt-4 space-y-3">
-          {detail.fields.map((field) => (
-            <div
-              key={`${detail.title}-${field.label}`}
-              className="grid grid-cols-[88px_1fr] gap-3 rounded-[16px] border border-[#eadfd8] bg-white px-4 py-3 text-[14px] leading-6"
-            >
-              <div className="text-[#8b776e]">{field.label}</div>
-              <div className="text-[#33231e]">{field.value}</div>
-            </div>
-          ))}
-          {detail.notes.map((note) => (
-            <div
-              key={`${detail.title}-${note}`}
-              className="rounded-[16px] border border-[#eadfd8] bg-white px-4 py-3 text-[14px] leading-6 text-[#5f463d] whitespace-pre-line"
-            >
-              {note}
-            </div>
-          ))}
         </div>
       </div>
     </div>
@@ -2579,25 +2597,29 @@ function GuestQaSheet({
   );
 }
 
-function HumanStarter({
-  language,
-  directContactOnly = false,
-}: {
-  language: GuestLanguage;
-  directContactOnly?: boolean;
-}) {
+function getFrontStarterBody(language: GuestLanguage, directContactOnly = false) {
   const ui = getGuestUiCopy(language);
 
-  return (
-    <div className="mb-5 flex items-start gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[12px] font-light text-[#6f564b] shadow-[0_8px_20px_rgba(72,47,35,0.06)]">
-        {senderAvatar("front", language).label}
-      </div>
-      <div className="max-w-[82%] rounded-[24px] rounded-bl-md bg-white px-4 py-3 text-sm leading-6 text-[#33231e] shadow-[0_10px_24px_rgba(72,47,35,0.05)] lg:max-w-[48%] xl:max-w-[42%]">
-        {directContactOnly ? ui.directContactMessage : ui.humanStarterMessage}
-      </div>
-    </div>
-  );
+  return directContactOnly ? ui.directContactMessage : ui.humanStarterMessage;
+}
+
+function createFrontStarterMessage(
+  language: GuestLanguage,
+  directContactOnly: boolean,
+  messages: DisplayMessage[],
+): DisplayMessage {
+  const firstTimestamp = messages.find((message) => message.timestamp)?.timestamp ?? null;
+  const parsedFirstTimestamp = firstTimestamp ? Date.parse(firstTimestamp) : Number.NaN;
+
+  return {
+    id: "front-starter",
+    sender: "front",
+    body: getFrontStarterBody(language, directContactOnly),
+    timestamp:
+      firstTimestamp && !Number.isNaN(parsedFirstTimestamp)
+        ? new Date(parsedFirstTimestamp - 1).toISOString()
+        : firstTimestamp,
+  };
 }
 
 export function GuestChatExperience({
@@ -2636,26 +2658,25 @@ export function GuestChatExperience({
   };
   const messages = chatMessages;
   const hasGuestMessage = messages.some((message) => message.sender === "guest");
-  const hasNonSystemHistory = messages.some(
-    (message) => message.sender === "guest" || message.sender === "ai" || message.sender === "front",
-  );
+  const hasFrontMessage = messages.some((message) => message.sender === "front");
   const activeHandoffConfirmationMessageId = useMemo(
     () => findActiveHandoffConfirmationMessageId(messages),
     [messages],
   );
+  const handoffStatus = threadMeta.handoffStatus ?? null;
+  const unreadGuestReplies = threadMeta.unreadCountGuest ?? 0;
+  const showHandoffBanner = handoffStatus === "requested" || handoffStatus === "accepted";
+  const shouldInjectFrontStarter = !hasGuestMessage && !hasFrontMessage;
   const visibleMessages = useMemo(() => {
-    if (!hasGuestMessage && activeMode === "ai") {
-      return messages.filter(
-        (message) =>
-          !(
-            message.sender === "ai" &&
-            message.id === "ai-1"
-          ),
-      );
+    if (!shouldInjectFrontStarter) {
+      return messages;
     }
 
-    return messages;
-  }, [activeMode, hasGuestMessage, messages]);
+    return [
+      createFrontStarterMessage(language, !hasAiGuideContent || showHandoffBanner, messages),
+      ...messages,
+    ];
+  }, [hasAiGuideContent, language, messages, shouldInjectFrontStarter, showHandoffBanner]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -2891,10 +2912,6 @@ export function GuestChatExperience({
     }
   };
 
-  const handoffStatus = threadMeta.handoffStatus ?? null;
-  const unreadGuestReplies = threadMeta.unreadCountGuest ?? 0;
-  const showHandoffBanner = handoffStatus === "requested" || handoffStatus === "accepted";
-
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
       <header className="z-20 border-b border-[#eadfd9] bg-[#fbf7f3] text-[#171a22]">
@@ -2983,12 +3000,6 @@ export function GuestChatExperience({
               )).join(", ")}
             </div>
           </div>
-        ) : null}
-        {!hasGuestMessage && !hasNonSystemHistory ? (
-          <HumanStarter
-            language={language}
-            directContactOnly={!hasAiGuideContent || showHandoffBanner}
-          />
         ) : null}
         <div className="space-y-3 lg:space-y-2.5">
           {visibleMessages.map((message, index) => {

@@ -1750,6 +1750,10 @@ function compactLines(values: Array<string | null | undefined>) {
   return compactParts(values).join("\n");
 }
 
+function compactInline(values: Array<string | null | undefined>) {
+  return compactParts(values).join(" / ");
+}
+
 function takeFormatted(values: string[]) {
   return values.slice(0, 2).join("\n");
 }
@@ -1915,7 +1919,7 @@ function formatBreakfastEntry(entry: StructuredKnowledge["breakfast"][number]) {
 }
 
 function formatBathEntry(entry: StructuredKnowledge["baths"][number]) {
-  return compactLines([
+  return compactInline([
     entry.name ?? "大浴場",
     entry.hours ? `営業時間: ${entry.hours}` : null,
     entry.location ? `場所: ${entry.location}` : null,
@@ -1923,14 +1927,14 @@ function formatBathEntry(entry: StructuredKnowledge["baths"][number]) {
 }
 
 function formatFacilityEntry(entry: StructuredKnowledge["facilities"][number]) {
-  return compactLines([
+  return compactInline([
     entry.name ?? "館内施設",
     entry.hours ? `営業時間: ${entry.hours}` : null,
   ]);
 }
 
 function formatFacilityLocationEntry(entry: StructuredKnowledge["facilityLocations"][number]) {
-  return compactLines([
+  return compactInline([
     entry.name ?? "施設案内",
     entry.floor ? `場所: ${entry.floor}` : null,
   ]);
@@ -1979,7 +1983,7 @@ function formatCheckoutEntry(entry: StructuredKnowledge["checkout"][number]) {
 }
 
 function formatRoomServiceEntry(entry: StructuredKnowledge["roomService"][number]) {
-  return compactLines([
+  return compactInline([
     entry.menuName ?? "ルームサービス",
     entry.price ? `料金: ${entry.price}` : null,
     entry.hours ? `対応時間: ${entry.hours}` : null,
@@ -1987,7 +1991,7 @@ function formatRoomServiceEntry(entry: StructuredKnowledge["roomService"][number
 }
 
 function formatTransportEntry(entry: StructuredKnowledge["transport"][number]) {
-  return compactLines([
+  return compactInline([
     entry.companyName,
     entry.serviceType ? `種別: ${entry.serviceType}` : null,
     entry.phone ? `電話: ${entry.phone}` : null,
@@ -1997,7 +2001,7 @@ function formatTransportEntry(entry: StructuredKnowledge["transport"][number]) {
 }
 
 function formatNearbySpotEntry(entry: StructuredKnowledge["nearbySpots"][number]) {
-  return compactLines([
+  return compactInline([
     entry.name,
     entry.category ? `カテゴリ: ${entry.category}` : null,
     entry.distance ? `距離: ${entry.distance}` : null,

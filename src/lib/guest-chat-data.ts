@@ -1253,36 +1253,12 @@ async function getMessagesByThreadId(threadId: string) {
     .filter((value): value is GuestMessage => value !== null);
 }
 
-function areLogicallyEquivalentGuestMessages(left: GuestMessage, right: GuestMessage) {
-  if (
-    left.sender !== right.sender ||
-    (left.body ?? "") !== (right.body ?? "") ||
-    (left.imageUrl ?? null) !== (right.imageUrl ?? null) ||
-    (left.imageAlt ?? null) !== (right.imageAlt ?? null) ||
-    Boolean(left.handoffConfirmation) !== Boolean(right.handoffConfirmation)
-  ) {
-    return false;
-  }
-
-  const leftTime = left.timestamp ? Date.parse(left.timestamp) : Number.NaN;
-  const rightTime = right.timestamp ? Date.parse(right.timestamp) : Number.NaN;
-
-  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) {
-    return false;
-  }
-
-  return Math.abs(leftTime - rightTime) <= 90_000;
-}
-
 function mergeGuestMessages(left: GuestMessage[], right: GuestMessage[]) {
   const merged = [...left];
   const seenIds = new Set(left.map((message) => message.id));
 
   for (const message of right) {
-    if (
-      seenIds.has(message.id) ||
-      merged.some((existing) => areLogicallyEquivalentGuestMessages(existing, message))
-    ) {
+    if (seenIds.has(message.id)) {
       continue;
     }
 

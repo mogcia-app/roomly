@@ -999,6 +999,10 @@ function isTransientMessage(message: DisplayMessage) {
 }
 
 function areLogicallyEquivalentMessages(left: DisplayMessage, right: DisplayMessage) {
+  if (!isTransientMessage(left) && !isTransientMessage(right)) {
+    return false;
+  }
+
   if (
     left.sender !== right.sender ||
     (left.body ?? "") !== (right.body ?? "") ||
